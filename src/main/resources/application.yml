@@ -1,0 +1,94 @@
+spring:
+  application:
+    name: gepard
+
+  # ATIVAÇÃO VIRTUAL THREADS (Java 25 + Spring Boot 4)
+  threads:
+    virtual:
+      enabled: true
+
+  # Perfil padrão é 'dev' (H2). Para produção, defina SPRING_PROFILES_ACTIVE=prod
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+
+  # --- CONFIGURAÇÃO OAUTH2 (Google Calendar) ---
+  # Isso serve para obter o token do usuário, NÃO tem a ver com o Gemini
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: ${GOOGLE_CLIENT_ID}
+            client-secret: ${GOOGLE_CLIENT_SECRET}
+            # Escopos: OpenID, Email e Agenda (leitura/escrita)
+            scope:
+              - openid
+              - email
+              - https://www.googleapis.com/auth/calendar
+            # 'authorization_code' é o fluxo padrão para backend
+            authorization-grant-type: authorization_code
+            redirect-uri: "{baseUrl}/login/oauth2/code/google"
+            client-authentication-method: client_secret_basic
+        provider:
+          google:
+            # 'access_type=offline' garante que receberemos o refresh_token
+            # para agendar coisas mesmo quando o usuário não estiver logado.
+            authorization-uri: https://accounts.google.com/o/oauth2/v2/auth?access_type=offline&prompt=consent
+
+# --- CONFIGURAÇÃO CUSTOMIZADA (Bot e IA) ---
+gepard:
+  telegram:
+    bot-username: ${TELEGRAM_BOT_USERNAME}
+    bot-token: ${TELEGRAM_BOT_TOKEN}
+
+  # Agora usamos apenas a API Key, estilo Python script
+  gemini:
+    api-key: ${GEMINI_API_KEY}
+    model-name: gemini-3-flash-preview # O modelo mais rápido/barato atual
+
+---
+# --- AMBIENTE DE DESENVOLVIMENTO (H2) ---
+spring:
+  config:
+    activate:
+      on-profile: dev
+
+  datasource:
+    url: jdbc:h2:mem:geparddb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+
+---
+# --- AMBIENTE DE PRODUÇÃO (ORACLE OCI) ---
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+  datasource:
+    # URL para conexão TCPS (Segura) sem Wallet no client (mTLS one-way)
+    url: jdbc:oracle:thin:@(description=(retry_count=20)(retry_delay=3)(address=(protocol=tcps)(port=1522)(host=${ORACLE_HOST}))(connect_data=(service_name=${ORACLE_SERVICE_NAME}))(security=(ssl_server_cert_dn=${ORACLE_CERT_DN})))
+    username: ${ORACLE_DB_USER}
+    password: ${ORACLE_DB_PASSWORD}
+    driver-class-name: oracle.jdbc.OracleDriver
+    type: com.zaxxer.hikari.HikariDataSource
+
+  jpa:
+    database-platform: org.hibernate.dialect.OracleDialect
+    hibernate:
+      ddl-auto: validate # Produção: nunca create/update
+    properties:
+      hibernate:
+        format_sql: false
