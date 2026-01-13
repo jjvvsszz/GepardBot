@@ -33,12 +33,16 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-security-oauth2-client")
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
     implementation("org.springframework.boot:spring-boot-starter-web")
+    implementation("org.springframework.boot:spring-boot-starter-thymeleaf")
     implementation("com.fasterxml.jackson.core:jackson-databind")
-    implementation("org.telegram:telegrambots-spring-boot-starter:7.1.0") {
-        exclude(group = "org.glassfish.grizzly")
-        exclude(group = "org.glassfish.hk2")
-    }
-    implementation("com.google.cloud:google-cloud-vertexai:1.41.0")
+//    implementation("org.telegram:telegrambots-spring-boot-starter:7.1.0") {
+//        exclude(group = "org.glassfish.grizzly")
+//        exclude(group = "org.glassfish.hk2")
+//    }
+    implementation ("org.telegram:telegrambots-springboot-longpolling-starter:9.2.1")
+    implementation("org.telegram:telegrambots-client:9.2.1")
+    implementation("com.google.genai:google-genai:1.34.0")
+    implementation("com.google.guava:guava:33.5.0-jre")
     implementation("com.google.apis:google-api-services-calendar:v3-rev411-1.25.0")
     constraints {
         implementation("com.google.oauth-client:google-oauth-client:1.39.0") {

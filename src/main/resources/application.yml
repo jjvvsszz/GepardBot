@@ -43,8 +43,7 @@ gepard:
 
   # Agora usamos apenas a API Key, estilo Python script
   gemini:
-    api-key: ${GEMINI_API_KEY}
-    model-name: gemini-3-flash-preview # O modelo mais rápido/barato atual
+    model-name: models/gemini-3-flash-preview
 
 ---
 # --- AMBIENTE DE DESENVOLVIMENTO (H2) ---
@@ -54,7 +53,7 @@ spring:
       on-profile: dev
 
   datasource:
-    url: jdbc:h2:mem:geparddb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    url: jdbc:h2:file:./data/gepard_db;DB_CLOSE_DELAY=-1
     driver-class-name: org.h2.Driver
     username: sa
     password:

@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>Minhas Configurações - Gepard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        .status-dot { height: 10px; width: 10px; background-color: #bbb; border-radius: 50%; display: inline-block; margin-right: 5px; }
+        .connected { background-color: #198754; }
+        .disconnected { background-color: #dc3545; }
+    </style>
+</head>
+<body class="bg-light">
+<div class="container mt-4">
+    <div class="card shadow-sm" style="max-width: 600px; margin: 0 auto;">
+        <div class="card-header bg-white text-center py-3">
+            <h4 class="mb-0">🤖 Configuração Gepard</h4>
+            <small class="text-muted" th:text="'Usuário: ' + ${user.firstName}"></small>
+        </div>
+
+        <div class="card-body">
+            <!-- Mensagem de Sucesso -->
+            <div th:if="${message}" class="alert alert-success alert-dismissible fade show" role="alert">
+                <span th:text="${message}"></span>
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+
+            <!-- FORMULÁRIO GEMINI -->
+            <form action="/user/config/save" method="post">
+                <input type="hidden" name="token" th:value="${user.webLoginToken}">
+
+                <div class="mb-4">
+                    <label class="form-label fw-bold">🔑 Gemini API Key</label>
+                    <div class="input-group">
+                        <input type="text" name="geminiApiKey" class="form-control"
+                               placeholder="Começa com AIza..."
+                               th:value="${user.geminiApiKey}">
+                    </div>
+                    <div class="form-text">
+                        Obtenha gratuitamente no <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a>.
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-primary w-100">Salvar Chave</button>
+            </form>
+
+            <hr class="my-4">
+
+            <!-- STATUS GOOGLE AGENDA -->
+            <div class="mb-3">
+                <label class="form-label fw-bold">📅 Google Agenda</label>
+
+                <div th:if="${user.isGoogleConnected()}" class="alert alert-success d-flex align-items-center">
+                    <span class="status-dot connected"></span>
+                    <div>
+                        <strong>Conectado!</strong><br>
+                        <small>O bot tem permissão para agendar.</small>
+                    </div>
+                </div>
+
+                <div th:if="${!user.isGoogleConnected()}" class="alert alert-warning">
+                    <span class="status-dot disconnected"></span>
+                    <strong>Não conectado</strong>
+                    <p class="small mb-2">Necessário para criar eventos automaticamente.</p>
+                    <a th:href="${googleAuthLink}" class="btn btn-outline-dark w-100">
+                        <img src="https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg" width="20" class="me-2">
+                        Conectar Google Agenda
+                    </a>
+                </div>
+            </div>
+
+        </div>
+        <div class="card-footer text-center text-muted small">
+            Alterações são aplicadas imediatamente.
+        </div>
+    </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
