@@ -53,7 +53,7 @@ public class SystemSettingsService {
                 .telegramBotUsername(envBotUsername)
                 .googleClientId(envClientId)
                 .googleClientSecret(envClientSecret)
-                .geminiModel("models/gemini-1.5-flash")
+                .geminiModel("models/gemini-3-flash-preview")
                 .build();
         repository.save(config);
     }
