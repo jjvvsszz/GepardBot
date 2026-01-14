@@ -24,7 +24,7 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           default_bump: patch
-          release_branches: main
+          release_branches: master
           pre_release_branches: beta
           append_to_pre_release_tag: beta
           tag_prefix: v
@@ -48,6 +48,9 @@ jobs:
       - name: Build with Gradle
         run: ./gradlew clean build -x test
 
+      - name: Remove Plain JAR
+        run: rm build/libs/*-plain.jar || true
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
@@ -63,3 +66,4 @@ jobs:
           prerelease: true
           files: |
             build/libs/*.jar
+            pterodactylEgg/egg-gepard-bot.json
