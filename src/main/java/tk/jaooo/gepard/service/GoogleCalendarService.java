@@ -13,6 +13,7 @@ import com.google.api.services.calendar.Calendar;
 import com.google.api.services.calendar.model.Event;
 import com.google.api.services.calendar.model.EventDateTime;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tk.jaooo.gepard.model.AppUser;
@@ -38,15 +39,20 @@ public class GoogleCalendarService {
     private final String clientSecret;
 
     public GoogleCalendarService(
-            SystemSettingsService settingsService, // Injeta o serviço de config
-            AppUserRepository userRepository) throws GeneralSecurityException, IOException {
+            SystemSettingsService settingsService,
+            AppUserRepository userRepository,
+            @Value("${gepard.base-url}") String baseUrl) throws GeneralSecurityException, IOException { // Injeção da URL Base
 
-        tk.jaooo.gepard.model.GlobalConfig config = settingsService.getConfig(); // Pega do banco
+        tk.jaooo.gepard.model.GlobalConfig config = settingsService.getConfig();
 
         this.userRepository = userRepository;
         this.clientId = config.getGoogleClientId();
         this.clientSecret = config.getGoogleClientSecret();
-        this.redirectUri = "http://localhost:8080/login/oauth2/code/google";
+
+        String cleanBaseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
+        this.redirectUri = cleanBaseUrl + "/login/oauth2/code/google";
+
+        log.info("Google Redirect URI configurada para: {}", this.redirectUri);
 
         final NetHttpTransport HTTP_TRANSPORT = GoogleNetHttpTransport.newTrustedTransport();
 
@@ -68,7 +74,7 @@ public class GoogleCalendarService {
                 .setRedirectUri(redirectUri)
                 .setState(String.valueOf(telegramId))
                 .setAccessType("offline")
-                .set("prompt", "consent") // Força refresh_token
+                .set("prompt", "consent")
                 .build();
     }
 
@@ -93,14 +99,12 @@ public class GoogleCalendarService {
             throw new IllegalStateException("Usuário não autenticado.");
         }
 
-        // --- VALIDAÇÃO CRÍTICA DO JSON ---
         if (eventData.summary() == null || eventData.summary().isBlank()) {
             throw new IllegalArgumentException("Não consegui identificar o Título do evento.");
         }
         if (eventData.startDateTime() == null || eventData.startDateTime().isBlank()) {
-            throw new IllegalArgumentException("Não consegui identificar a DATA e HORA de início. Tente informar algo como 'Amanhã às 15h'.");
+            throw new IllegalArgumentException("Não consegui identificar a DATA e HORA de início.");
         }
-        // ---------------------------------
 
         GoogleCredential credential = new GoogleCredential.Builder()
                 .setTransport(GoogleNetHttpTransport.newTrustedTransport())
@@ -140,7 +144,7 @@ public class GoogleCalendarService {
     }
 
     private DateTime parseDate(String dateStr) {
-        if (!dateStr.endsWith("Z") && !dateStr.contains("+") && String.valueOf(dateStr.charAt(dateStr.length() - 6)).equals("-") == false) {
+        if (!dateStr.endsWith("Z") && !dateStr.contains("+") && !String.valueOf(dateStr.charAt(dateStr.length() - 6)).equals("-")) {
             dateStr = dateStr + "-03:00";
         }
         return new DateTime(dateStr);

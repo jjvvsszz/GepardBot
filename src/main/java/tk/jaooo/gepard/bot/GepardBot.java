@@ -2,6 +2,7 @@ package tk.jaooo.gepard.bot;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.util.HtmlUtils;
 import org.telegram.telegrambots.longpolling.interfaces.LongPollingUpdateConsumer;
@@ -42,6 +43,7 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
     private final GoogleCalendarService calendarService;
     private final AppUserRepository userRepository;
     private final ObjectMapper objectMapper;
+    private final String baseUrl;
 
     public GepardBot(
             SystemSettingsService settingsService,
@@ -49,13 +51,15 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
             GeminiService geminiService,
             GoogleCalendarService calendarService,
             AppUserRepository userRepository,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            @Value("${gepard.base-url}") String baseUrl) { // Injeção
         this.settingsService = settingsService;
         this.telegramClient = telegramClient;
         this.geminiService = geminiService;
         this.calendarService = calendarService;
         this.userRepository = userRepository;
         this.objectMapper = objectMapper;
+        this.baseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
     }
 
     @Override
@@ -81,13 +85,11 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
                             .build())
             );
 
-            // 1. Verifica se tem API Key
             if (!user.hasApiKey()) {
                 handleApiKeyFlow(message, user);
                 return;
             }
 
-            // 2. Verifica se tem Google conectado (apenas verifica refresh token)
             if (user.getGoogleRefreshToken() == null) {
                 String authLink = calendarService.buildAuthorizationUrl(telegramId);
                 String msg = """
@@ -99,15 +101,13 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
                 return;
             }
 
-            // 3. Comandos de Configuração (/start ou /config)
             if (text.equals("/config") || text.equals("/start")) {
                 String token = java.util.UUID.randomUUID().toString();
                 user.setWebLoginToken(token);
                 userRepository.save(user);
 
-                String link = "http://localhost:8080/user/config?token=" + token;
+                String link = baseUrl + "/user/config?token=" + token;
 
-                // CORREÇÃO: Uso de HTML e exibição do link cru para localhost
                 String msg = """
                 ⚙️ <b>Painel de Configuração</b>
                 
@@ -117,6 +117,7 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
                 
                 <i>(O link é seguro e exclusivo para você)</i>
                 
+                Caso não abra, copie:
                 <code>%s</code>
                 """.formatted(link, link);
 
@@ -124,7 +125,6 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
                 return;
             }
 
-            // 4. Fluxo Principal (IA)
             handleSmartScheduling(message, user);
 
         } catch (Exception e) {
@@ -159,14 +159,11 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
             String fullPrompt = String.format("Hoje é %s (Fuso America/Sao_Paulo). O usuário pede: %s",
                     nowSP.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME), prompt);
 
-            // Chama IA passando o usuário (para pegar a preferência de modelo)
             String jsonResponse = geminiService.generateContent(fullPrompt, imageBytes, user);
             EventExtractionDTO eventDTO = objectMapper.readValue(jsonResponse, EventExtractionDTO.class);
 
-            // Cria evento
             String eventLink = calendarService.createEvent(user, eventDTO);
 
-            // Resposta formatada em HTML seguro
             String safeSummary = HtmlUtils.htmlEscape(eventDTO.summary());
             String msg = """
                     ✅ <b>Agendado!</b>
@@ -228,7 +225,6 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
             telegramClient.execute(sm);
         } catch (TelegramApiException e) {
             log.error("Erro ao enviar HTML Telegram", e);
-            // Fallback para texto puro se falhar o HTML (ex: tag mal fechada)
             sendRawText(chatId, text);
         }
     }
