@@ -3,7 +3,7 @@ name: Auto Release Java 25
 on:
   push:
     branches:
-      - main
+      - master
 
 permissions:
   contents: write # Necessário para criar Tags e Releases
@@ -23,7 +23,7 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           default_bump: patch # Se não especificar nada no commit, sobe o patch (0.0.x)
-          release_branches: main
+          release_branches: master
 
       # 2. Configura Java 25
       - name: Set up JDK 25
