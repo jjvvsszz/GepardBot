@@ -28,7 +28,7 @@ public class AdminController {
     }
 
     @GetMapping("/admin/setup")
-    public String setupPage(Model model) {
+    public String setupPage() {
         GlobalConfig config = settingsService.getConfig();
         if (!config.isAdminSetupRequired()) {
             return "redirect:/admin";
@@ -39,8 +39,7 @@ public class AdminController {
     @PostMapping("/admin/setup/save")
     public String saveCredentials(
             @RequestParam String username,
-            @RequestParam String password,
-            Model model) {
+            @RequestParam String password) {
 
         settingsService.updateAdminCredentials(username, password);
         return "redirect:/admin";

@@ -1,6 +1,7 @@
 package tk.jaooo.gepard.service;
 
 import lombok.RequiredArgsConstructor;
+import org.jetbrains.annotations.NotNull;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -15,8 +16,9 @@ public class CustomAdminDetailsService implements UserDetailsService {
 
     private final GlobalConfigRepository repository;
 
+    @NotNull
     @Override
-    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+    public UserDetails loadUserByUsername(@NotNull String username) throws UsernameNotFoundException {
         GlobalConfig config = repository.findById(1L)
                 .orElseThrow(() -> new UsernameNotFoundException("Admin não configurado"));
 
