@@ -10,6 +10,8 @@ import org.springframework.transaction.annotation.Transactional;
 import tk.jaooo.gepard.model.GlobalConfig;
 import tk.jaooo.gepard.repository.GlobalConfigRepository;
 
+import java.util.UUID;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -18,37 +20,60 @@ public class SystemSettingsService {
     private final GlobalConfigRepository repository;
     private final PasswordEncoder passwordEncoder;
 
-    // Fallbacks
-    @Value("${gepard.telegram.bot-token:}") private String envBotToken;
-    @Value("${gepard.telegram.bot-username:}") private String envBotUsername;
-    @Value("${spring.security.oauth2.client.registration.google.client-id:}") private String envClientId;
-    @Value("${spring.security.oauth2.client.registration.google.client-secret:}") private String envClientSecret;
+    @Value("${gepard.telegram.bot-token}") private String envBotToken;
+    @Value("${gepard.telegram.bot-username}") private String envBotUsername;
+    @Value("${spring.security.oauth2.client.registration.google.client-id}") private String envClientId;
+    @Value("${spring.security.oauth2.client.registration.google.client-secret}") private String envClientSecret;
 
     @PostConstruct
     public void init() {
-        if (repository.count() == 0) {
-            log.info("⚙️ Inicializando configurações globais...");
+        GlobalConfig config = repository.findById(1L).orElse(null);
 
-            String tempPassword = java.util.UUID.randomUUID().toString().substring(0, 8);
-
-            log.warn("⚠️ ATENÇÃO: PRIMEIRO ACESSO ADMIN ⚠️");
-            log.warn("Usuário: admin");
-            log.warn("Senha Temporária: {}", tempPassword);
-            log.warn("Você será obrigado a mudar esta senha ao logar.");
-
-            GlobalConfig config = GlobalConfig.builder()
-                    .id(1L)
-                    .adminUsername("admin")
-                    .adminPasswordHash(passwordEncoder.encode(tempPassword))
-                    .adminSetupRequired(true)
-                    .telegramBotToken(envBotToken)
-                    .telegramBotUsername(envBotUsername)
-                    .googleClientId(envClientId)
-                    .googleClientSecret(envClientSecret)
-                    .geminiModel("gemini-1.5-flash")
-                    .build();
-            repository.save(config);
+        if (config == null) {
+            log.info("⚙️ Banco vazio. Inicializando configurações...");
+            createInitialConfig();
+        } else {
+            if (config.getAdminUsername() == null || config.getAdminPasswordHash() == null) {
+                log.warn("⚠️ Banco detectado sem credenciais de Admin. Gerando senha temporária...");
+                resetAdminCredentials(config);
+            }
         }
+    }
+
+    private void createInitialConfig() {
+        String tempPassword = UUID.randomUUID().toString().substring(0, 8);
+        printAdminCredentials("admin", tempPassword);
+
+        GlobalConfig config = GlobalConfig.builder()
+                .id(1L)
+                .adminUsername("admin")
+                .adminPasswordHash(passwordEncoder.encode(tempPassword))
+                .adminSetupRequired(true)
+                .telegramBotToken(envBotToken)
+                .telegramBotUsername(envBotUsername)
+                .googleClientId(envClientId)
+                .googleClientSecret(envClientSecret)
+                .geminiModel("models/gemini-1.5-flash")
+                .build();
+        repository.save(config);
+    }
+
+    private void resetAdminCredentials(GlobalConfig config) {
+        String tempPassword = UUID.randomUUID().toString().substring(0, 8);
+        printAdminCredentials("admin", tempPassword);
+
+        config.setAdminUsername("admin");
+        config.setAdminPasswordHash(passwordEncoder.encode(tempPassword));
+        config.setAdminSetupRequired(true);
+        repository.save(config);
+    }
+
+    private void printAdminCredentials(String user, String pass) {
+        log.warn("==================================================");
+        log.warn("🔐 CREDENCIAIS DE ADMIN TEMPORÁRIAS");
+        log.warn("👤 Usuário: {}", user);
+        log.warn("🔑 Senha:   {}", pass);
+        log.warn("==================================================");
     }
 
     public GlobalConfig getConfig() {
@@ -71,7 +96,7 @@ public class SystemSettingsService {
         GlobalConfig config = getConfig();
         config.setAdminUsername(newUsername);
         config.setAdminPasswordHash(passwordEncoder.encode(newPassword));
-        config.setAdminSetupRequired(false); // Libera o acesso
+        config.setAdminSetupRequired(false);
         repository.save(config);
     }
 }
