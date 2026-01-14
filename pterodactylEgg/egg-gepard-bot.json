@@ -1,222 +1,202 @@
 {
-    "_comment": "DO NOT EDIT: FILE GENERATED AUTOMATICALLY BY PTERODACTYL PANEL - PTERODACTYL.IO",
-    "meta": {
-        "version": "PTDL_v2",
-        "update_url": null
+  "_comment": "DO NOT EDIT: FILE GENERATED AUTOMATICALLY BY PTERODACTYL PANEL - PTERODACTYL.IO",
+  "meta": {
+    "version": "PTDL_v2",
+    "update_url": null
+  },
+  "exported_at": "2026-01-14T13:37:20-05:00",
+  "name": "Gepard Bot",
+  "author": "jjvvsszz.gamer@gmail.com",
+  "description": null,
+  "features": null,
+  "docker_images": {
+    "ghcr.io\/pterodactyl\/yolks:java_25": "ghcr.io\/pterodactyl\/yolks:java_25"
+  },
+  "file_denylist": [],
+  "startup": "java -Xms128M -Xmx{{SERVER_MEMORY}}M -Dserver.port={{SERVER_PORT}} -Djava.security.egd=file:\/dev\/.\/urandom -jar {{SERVER_JARFILE}}",
+  "config": {
+    "files": "{}",
+    "startup": "{\r\n    \"done\": \"Started GepardApplication\"\r\n}",
+    "logs": "{}",
+    "stop": "^C"
+  },
+  "scripts": {
+    "installation": {
+      "script": "apt-get update -y && apt-get install -y curl jq\r\n\r\nGITHUB_REPO=\"jjvvsszz\/GepardBot\"\r\n\r\necho -e \"\u2b07\ufe0f  Buscando a \u00faltima release em ${GITHUB_REPO}...\"\r\n\r\nDOWNLOAD_URL=$(curl -s \"https:\/\/api.github.com\/repos\/${GITHUB_REPO}\/releases\/latest\" | jq -r '.assets[] | select(.name | endswith(\".jar\")) | .browser_download_url' | head -n 1)\r\n\r\nif [ -z \"${DOWNLOAD_URL}\" ] || [ \"${DOWNLOAD_URL}\" == \"null\" ]; then\r\n    echo -e \"\u274c Erro: Nenhum arquivo JAR encontrado na \u00faltima release.\"\r\n    echo -e \"\u2139\ufe0f  Verifique se a release foi publicada corretamente no GitHub.\"\r\n    exit 1\r\nelse\r\n    echo -e \"\ud83d\udd17 Encontrado: ${DOWNLOAD_URL}\"\r\n    echo -e \"\ud83d\udce5 Baixando para ${SERVER_JARFILE}...\"\r\n    \r\n    curl -L -o \"${SERVER_JARFILE}\" \"${DOWNLOAD_URL}\"\r\n    \r\n    if [ -f \"${SERVER_JARFILE}\" ]; then\r\n        echo -e \"\u2705 Instala\u00e7\u00e3o conclu\u00edda com sucesso!\"\r\n    else\r\n        echo -e \"\u274c Falha ao salvar o arquivo.\"\r\n        exit 1\r\n    fi\r\nfi",
+      "container": "debian:bookworm-slim",
+      "entrypoint": "bash"
+    }
+  },
+  "variables": [
+    {
+      "name": "Server Jar File",
+      "description": "Nome do arquivo JAR",
+      "env_variable": "SERVER_JARFILE",
+      "default_value": "app.jar",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|string|ends_with:.jar",
+      "field_type": "text"
     },
-    "exported_at": "2026-01-14T08:08:33-05:00",
-    "name": "Gepard Bot",
-    "author": "jjvvsszz.gamer@gmail.com",
-    "description": null,
-    "features": null,
-    "docker_images": {
-        "ghcr.io\/pterodactyl\/yolks:java_25": "ghcr.io\/pterodactyl\/yolks:java_25"
+    {
+      "name": "Spring Profile",
+      "description": "Use 'dev' para H2, 'ptero' para Banco do Painel, 'prod' para Oracle.",
+      "env_variable": "SPRING_PROFILES_ACTIVE",
+      "default_value": "dev",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|string",
+      "field_type": "text"
     },
-    "file_denylist": [],
-    "startup": "java -Xms128M -Xmx{{SERVER_MEMORY}}M -Dserver.port={{SERVER_PORT}} -Djava.security.egd=file:\/dev\/.\/urandom -jar {{SERVER_JARFILE}}",
-    "config": {
-        "files": "{}",
-        "startup": "{\r\n    \"done\": \"Started GepardApplication\"\r\n}",
-        "logs": "{}",
-        "stop": "^C"
+    {
+      "name": "Google Client ID",
+      "description": "OAuth2 Client ID",
+      "env_variable": "GOOGLE_CLIENT_ID",
+      "default_value": "",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|string",
+      "field_type": "text"
     },
-    "scripts": {
-        "installation": {
-            "script": "#!\/bin\/bash\r\n# Script de Instala\u00e7\u00e3o Autom\u00e1tica via GitHub Releases\r\n\r\napt-get update -y && apt-get install -y curl jq\r\n\r\nif [ -z \"${GITHUB_USER_REPO}\" ] || [ -z \"${GITHUB_PAT}\" ]; then\r\n    echo -e \"\u26a0\ufe0f  Vari\u00e1veis do GitHub n\u00e3o configuradas. Pulando download autom\u00e1tico.\"\r\nelse\r\n    echo -e \"\u2b07\ufe0f  Buscando release em ${GITHUB_USER_REPO}...\"\r\n    # Busca URL do JAR\r\n    ASSET_URL=$(curl -H \"Authorization: token ${GITHUB_PAT}\" -s \"https:\/\/api.github.com\/repos\/${GITHUB_USER_REPO}\/releases\/latest\" | jq -r '.assets[] | select(.name | endswith(\".jar\")) | .url' | head -n 1)\r\n\r\n    if [ -z \"${ASSET_URL}\" ] || [ \"${ASSET_URL}\" == \"null\" ]; then\r\n        echo -e \"\u274c Nenhum JAR encontrado na \u00faltima release.\"\r\n    else\r\n        echo -e \"\ud83d\udd17 Baixando JAR...\"\r\n        curl -L -H \"Authorization: token ${GITHUB_PAT}\" -H \"Accept: application\/octet-stream\" -o \"${SERVER_JARFILE}\" \"${ASSET_URL}\"\r\n        echo -e \"\u2705 Download conclu\u00eddo!\"\r\n    fi\r\nfi",
-            "container": "debian:bookworm-slim",
-            "entrypoint": "bash"
-        }
+    {
+      "name": "Google Client Secret",
+      "description": "OAuth2 Client Secret",
+      "env_variable": "GOOGLE_CLIENT_SECRET",
+      "default_value": "",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|string",
+      "field_type": "text"
     },
-    "variables": [
-        {
-            "name": "Server Jar File",
-            "description": "Nome do arquivo JAR",
-            "env_variable": "SERVER_JARFILE",
-            "default_value": "app.jar",
-            "user_viewable": true,
-            "user_editable": true,
-            "rules": "required|string|ends_with:.jar",
-            "field_type": "text"
-        },
-        {
-            "name": "Spring Profile",
-            "description": "Use 'dev' para H2, 'ptero' para Banco do Painel, 'prod' para Oracle.",
-            "env_variable": "SPRING_PROFILES_ACTIVE",
-            "default_value": "dev",
-            "user_viewable": true,
-            "user_editable": true,
-            "rules": "required|string",
-            "field_type": "text"
-        },
-        {
-            "name": "Google Client ID",
-            "description": "OAuth2 Client ID",
-            "env_variable": "GOOGLE_CLIENT_ID",
-            "default_value": "",
-            "user_viewable": true,
-            "user_editable": true,
-            "rules": "required|string",
-            "field_type": "text"
-        },
-        {
-            "name": "Google Client Secret",
-            "description": "OAuth2 Client Secret",
-            "env_variable": "GOOGLE_CLIENT_SECRET",
-            "default_value": "",
-            "user_viewable": true,
-            "user_editable": true,
-            "rules": "required|string",
-            "field_type": "text"
-        },
-        {
-            "name": "Telegram Bot Token",
-            "description": "Token do BotFather",
-            "env_variable": "TELEGRAM_BOT_TOKEN",
-            "default_value": "",
-            "user_viewable": true,
-            "user_editable": true,
-            "rules": "required|string",
-            "field_type": "text"
-        },
-        {
-            "name": "Telegram Bot Username",
-            "description": "Username sem @",
-            "env_variable": "TELEGRAM_BOT_USERNAME",
-            "default_value": "",
-            "user_viewable": true,
-            "user_editable": true,
-            "rules": "required|string",
-            "field_type": "text"
-        },
-        {
-            "name": "Oracle Host",
-            "description": "Ex: xxxx.oraclecloud.com (Apenas para perfil 'prod')",
-            "env_variable": "ORACLE_HOST",
-            "default_value": "",
-            "user_viewable": true,
-            "user_editable": true,
-            "rules": "nullable|string",
-            "field_type": "text"
-        },
-        {
-            "name": "Oracle Service Name",
-            "description": "Ex: xxxx_high.adb.oraclecloud.com",
-            "env_variable": "ORACLE_SERVICE_NAME",
-            "default_value": "",
-            "user_viewable": true,
-            "user_editable": true,
-            "rules": "nullable|string",
-            "field_type": "text"
-        },
-        {
-            "name": "Oracle DB User",
-            "description": "Geralmente ADMIN",
-            "env_variable": "ORACLE_DB_USER",
-            "default_value": "ADMIN",
-            "user_viewable": true,
-            "user_editable": true,
-            "rules": "nullable|string",
-            "field_type": "text"
-        },
-        {
-            "name": "Oracle DB Password",
-            "description": "Senha do banco Oracle",
-            "env_variable": "ORACLE_DB_PASSWORD",
-            "default_value": "",
-            "user_viewable": true,
-            "user_editable": true,
-            "rules": "nullable|string",
-            "field_type": "text"
-        },
-        {
-            "name": "Oracle Cert DN",
-            "description": "Valor de SSL_SERVER_CERT_DN da string de conex\u00e3o (Ex: CN=adb...)",
-            "env_variable": "ORACLE_CERT_DN",
-            "default_value": "",
-            "user_viewable": true,
-            "user_editable": true,
-            "rules": "nullable|string",
-            "field_type": "text"
-        },
-        {
-            "name": "GitHub User\/Repo",
-            "description": "Ex: tkjaooo\/gepard",
-            "env_variable": "GITHUB_USER_REPO",
-            "default_value": "",
-            "user_viewable": true,
-            "user_editable": true,
-            "rules": "nullable|string",
-            "field_type": "text"
-        },
-        {
-            "name": "GitHub PAT",
-            "description": "Token para download autom\u00e1tico do Release",
-            "env_variable": "GITHUB_PAT",
-            "default_value": "",
-            "user_viewable": true,
-            "user_editable": true,
-            "rules": "nullable|string",
-            "field_type": "text"
-        },
-        {
-            "name": "Database Endpoint",
-            "description": "",
-            "env_variable": "DB_HOST",
-            "default_value": "localhost",
-            "user_viewable": true,
-            "user_editable": true,
-            "rules": "required|string|max:30",
-            "field_type": "text"
-        },
-        {
-            "name": "Database Port",
-            "description": "",
-            "env_variable": "DB_PORT",
-            "default_value": "3306",
-            "user_viewable": true,
-            "user_editable": true,
-            "rules": "nullable|string",
-            "field_type": "text"
-        },
-        {
-            "name": "Database Name",
-            "description": "",
-            "env_variable": "DB_DATABASE",
-            "default_value": "gepard",
-            "user_viewable": true,
-            "user_editable": true,
-            "rules": "nullable|string",
-            "field_type": "text"
-        },
-        {
-            "name": "Database Username",
-            "description": "",
-            "env_variable": "DB_USERNAME",
-            "default_value": "",
-            "user_viewable": true,
-            "user_editable": true,
-            "rules": "nullable|string",
-            "field_type": "text"
-        },
-        {
-            "name": "Database Password",
-            "description": "",
-            "env_variable": "DB_PASSWORD",
-            "default_value": "",
-            "user_viewable": true,
-            "user_editable": true,
-            "rules": "nullable|string",
-            "field_type": "text"
-        },
-        {
-            "name": "Base URL",
-            "description": "",
-            "env_variable": "APP_BASE_URL",
-            "default_value": "",
-            "user_viewable": true,
-            "user_editable": true,
-            "rules": "required|string",
-            "field_type": "text"
-        }
-    ]
+    {
+      "name": "Telegram Bot Token",
+      "description": "Token do BotFather",
+      "env_variable": "TELEGRAM_BOT_TOKEN",
+      "default_value": "",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|string",
+      "field_type": "text"
+    },
+    {
+      "name": "Telegram Bot Username",
+      "description": "Username sem @",
+      "env_variable": "TELEGRAM_BOT_USERNAME",
+      "default_value": "",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|string",
+      "field_type": "text"
+    },
+    {
+      "name": "Oracle Host",
+      "description": "Ex: xxxx.oraclecloud.com (Apenas para perfil 'prod')",
+      "env_variable": "ORACLE_HOST",
+      "default_value": "",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "nullable|string",
+      "field_type": "text"
+    },
+    {
+      "name": "Oracle Service Name",
+      "description": "Ex: xxxx_high.adb.oraclecloud.com",
+      "env_variable": "ORACLE_SERVICE_NAME",
+      "default_value": "",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "nullable|string",
+      "field_type": "text"
+    },
+    {
+      "name": "Oracle DB User",
+      "description": "Geralmente ADMIN",
+      "env_variable": "ORACLE_DB_USER",
+      "default_value": "ADMIN",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "nullable|string",
+      "field_type": "text"
+    },
+    {
+      "name": "Oracle DB Password",
+      "description": "Senha do banco Oracle",
+      "env_variable": "ORACLE_DB_PASSWORD",
+      "default_value": "",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "nullable|string",
+      "field_type": "text"
+    },
+    {
+      "name": "Oracle Cert DN",
+      "description": "Valor de SSL_SERVER_CERT_DN da string de conex\u00e3o (Ex: CN=adb...)",
+      "env_variable": "ORACLE_CERT_DN",
+      "default_value": "",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "nullable|string",
+      "field_type": "text"
+    },
+    {
+      "name": "Database Endpoint",
+      "description": "",
+      "env_variable": "DB_HOST",
+      "default_value": "localhost",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|string|max:30",
+      "field_type": "text"
+    },
+    {
+      "name": "Database Port",
+      "description": "",
+      "env_variable": "DB_PORT",
+      "default_value": "3306",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "nullable|string",
+      "field_type": "text"
+    },
+    {
+      "name": "Database Name",
+      "description": "",
+      "env_variable": "DB_DATABASE",
+      "default_value": "gepard",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "nullable|string",
+      "field_type": "text"
+    },
+    {
+      "name": "Database Username",
+      "description": "",
+      "env_variable": "DB_USERNAME",
+      "default_value": "",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "nullable|string",
+      "field_type": "text"
+    },
+    {
+      "name": "Database Password",
+      "description": "",
+      "env_variable": "DB_PASSWORD",
+      "default_value": "",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "nullable|string",
+      "field_type": "text"
+    },
+    {
+      "name": "Base URL",
+      "description": "",
+      "env_variable": "APP_BASE_URL",
+      "default_value": "",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|string",
+      "field_type": "text"
+    }
+  ]
 }
