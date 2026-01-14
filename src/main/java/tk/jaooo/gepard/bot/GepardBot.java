@@ -85,22 +85,6 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
                             .build())
             );
 
-            if (!user.hasApiKey()) {
-                handleApiKeyFlow(message, user);
-                return;
-            }
-
-            if (user.getGoogleRefreshToken() == null) {
-                String authLink = calendarService.buildAuthorizationUrl(telegramId);
-                String msg = """
-                        📅 <b>Permissão necessária</b>
-                        
-                        <a href="%s">Clique aqui para conectar sua Agenda</a>
-                        """.formatted(authLink);
-                sendHtmlText(chatId, msg);
-                return;
-            }
-
             if (text.equals("/config") || text.equals("/start")) {
                 String token = java.util.UUID.randomUUID().toString();
                 user.setWebLoginToken(token);
@@ -121,6 +105,22 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
                 <code>%s</code>
                 """.formatted(link, link);
 
+                sendHtmlText(chatId, msg);
+                return;
+            }
+
+            if (!user.hasApiKey()) {
+                handleApiKeyFlow(message, user);
+                return;
+            }
+
+            if (user.getGoogleRefreshToken() == null) {
+                String authLink = calendarService.buildAuthorizationUrl(telegramId);
+                String msg = """
+                        📅 <b>Permissão necessária</b>
+                        
+                        <a href="%s">Clique aqui para conectar sua Agenda</a>
+                        """.formatted(authLink);
                 sendHtmlText(chatId, msg);
                 return;
             }
