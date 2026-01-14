@@ -41,10 +41,6 @@ gepard:
     bot-username: ${TELEGRAM_BOT_USERNAME}
     bot-token: ${TELEGRAM_BOT_TOKEN}
 
-  # Agora usamos apenas a API Key, estilo Python script
-  gemini:
-    model-name: models/gemini-3-flash-preview
-
 ---
 # --- AMBIENTE DE DESENVOLVIMENTO (H2) ---
 spring:
@@ -91,3 +87,25 @@ spring:
     properties:
       hibernate:
         format_sql: false
+
+---
+# --- AMBIENTE PTERODACTYL (MariaDB/MySQL) ---
+spring:
+  config:
+    activate:
+      on-profile: ptero
+
+  datasource:
+    # Monta a URL usando as variáveis nativas do Painel
+    url: jdbc:mysql://${DB_HOST}:${DB_PORT}/${DB_DATABASE}?allowPublicKeyRetrieval=true&useSSL=false&serverTimezone=America/Sao_Paulo
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    type: com.zaxxer.hikari.HikariDataSource
+
+  jpa:
+    database-platform: org.hibernate.dialect.MariaDBDialect
+    hibernate:
+      # Em produção, geralmente usamos "update" ou "validate".
+      # "update" é seguro para bots pequenos (cria tabelas se não existirem).
+      ddl-auto: update
