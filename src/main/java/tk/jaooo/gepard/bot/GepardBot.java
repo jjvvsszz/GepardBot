@@ -85,7 +85,7 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
                             .build())
             );
 
-            if (text.equals("/config") || text.equals("/start")) {
+            if (text.equals("/config")) {
                 String link = generateSettingsURL(user);
 
                 String msg = """
