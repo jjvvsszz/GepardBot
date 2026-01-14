@@ -3,6 +3,7 @@ package tk.jaooo.gepard.bot;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import org.springframework.web.util.HtmlUtils;
 import org.telegram.telegrambots.longpolling.interfaces.LongPollingUpdateConsumer;
 import org.telegram.telegrambots.longpolling.starter.SpringLongPollingBot;
 import org.telegram.telegrambots.longpolling.util.LongPollingSingleThreadUpdateConsumer;
@@ -71,7 +72,6 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
         Long chatId = message.getChatId();
         String text = message.hasText() ? message.getText() : "";
 
-
         try {
             AppUser user = userRepository.findById(telegramId).orElseGet(() ->
                     userRepository.save(AppUser.builder()
@@ -81,17 +81,25 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
                             .build())
             );
 
+            // 1. Verifica se tem API Key
             if (!user.hasApiKey()) {
                 handleApiKeyFlow(message, user);
                 return;
             }
 
+            // 2. Verifica se tem Google conectado (apenas verifica refresh token)
             if (user.getGoogleRefreshToken() == null) {
                 String authLink = calendarService.buildAuthorizationUrl(telegramId);
-                sendMarkdownText(chatId, "📅 **Permissão necessária**\n\n[Clique aqui para conectar sua Agenda](" + authLink + ")");
+                String msg = """
+                        📅 <b>Permissão necessária</b>
+                        
+                        <a href="%s">Clique aqui para conectar sua Agenda</a>
+                        """.formatted(authLink);
+                sendHtmlText(chatId, msg);
                 return;
             }
 
+            // 3. Comandos de Configuração (/start ou /config)
             if (text.equals("/config") || text.equals("/start")) {
                 String token = java.util.UUID.randomUUID().toString();
                 user.setWebLoginToken(token);
@@ -99,20 +107,24 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
 
                 String link = "http://localhost:8080/user/config?token=" + token;
 
+                // CORREÇÃO: Uso de HTML e exibição do link cru para localhost
                 String msg = """
-                ⚙️ **Painel de Configuração**
+                ⚙️ <b>Painel de Configuração</b>
                 
                 Clique no link abaixo para gerenciar sua Chave Gemini e conectar sua Agenda:
                 
-                👉 [Abrir Minhas Configurações](%s)
+                👉 <a href="%s">Abrir Minhas Configurações</a>
                 
-                *(O link é seguro e exclusivo para você)*
-                """.formatted(link);
+                <i>(O link é seguro e exclusivo para você)</i>
+                
+                <code>%s</code>
+                """.formatted(link, link);
 
-                sendMarkdownText(chatId, msg);
+                sendHtmlText(chatId, msg);
                 return;
             }
 
+            // 4. Fluxo Principal (IA)
             handleSmartScheduling(message, user);
 
         } catch (Exception e) {
@@ -126,9 +138,9 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
         if (text.startsWith("AIza")) {
             user.setGeminiApiKey(text);
             userRepository.save(user);
-            sendMarkdownText(message.getChatId(), "✅ **API Key Salva!**\nAgora mande o evento.");
+            sendHtmlText(message.getChatId(), "✅ <b>API Key Salva!</b>\nAgora mande o evento (texto ou foto).");
         } else {
-            sendMarkdownText(message.getChatId(), "👋 Envie sua **Gemini API Key** para começar.");
+            sendHtmlText(message.getChatId(), "👋 Envie sua <b>Gemini API Key</b> para começar.");
         }
     }
 
@@ -147,25 +159,34 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
             String fullPrompt = String.format("Hoje é %s (Fuso America/Sao_Paulo). O usuário pede: %s",
                     nowSP.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME), prompt);
 
+            // Chama IA passando o usuário (para pegar a preferência de modelo)
             String jsonResponse = geminiService.generateContent(fullPrompt, imageBytes, user);
             EventExtractionDTO eventDTO = objectMapper.readValue(jsonResponse, EventExtractionDTO.class);
+
+            // Cria evento
             String eventLink = calendarService.createEvent(user, eventDTO);
 
-            sendMarkdownText(chatId, "✅ **Agendado!**\n\n" +
-                    "📝 " + eventDTO.summary() + "\n" +
-                    "⏰ " + eventDTO.startDateTime() + "\n" +
-                    "[Ver no Google Agenda](" + eventLink + ")");
+            // Resposta formatada em HTML seguro
+            String safeSummary = HtmlUtils.htmlEscape(eventDTO.summary());
+            String msg = """
+                    ✅ <b>Agendado!</b>
+                    
+                    📝 %s
+                    ⏰ %s
+                    
+                    <a href="%s">Ver no Google Agenda</a>
+                    """.formatted(safeSummary, eventDTO.startDateTime(), eventLink);
+
+            sendHtmlText(chatId, msg);
 
         } catch (RuntimeException e) {
-            Throwable cause = e.getCause();
             String errorMsg = e.getMessage();
-
-            log.error("Erro no processo de IA/Agenda: {}", errorMsg);
+            log.error("Erro IA/Agenda: {}", errorMsg);
 
             if (errorMsg.contains("429") || errorMsg.contains("quota")) {
-                sendRawText(chatId, "⏳ Cota excedida. Tente novamente em breve.");
+                sendRawText(chatId, "⏳ Cota excedida do Gemini. Tente novamente em breve.");
             } else if (errorMsg.contains("404") || errorMsg.contains("Not Found")) {
-                sendRawText(chatId, "❌ Modelo não encontrado ou erro de API.");
+                sendRawText(chatId, "❌ Modelo não encontrado. Verifique a configuração.");
             } else if (errorMsg.contains("Unable to process input image")) {
                 sendRawText(chatId, "❌ A IA não conseguiu ler a imagem. Tente outra foto.");
             } else {
@@ -182,7 +203,7 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
             telegramClient.execute(SendChatAction.builder()
                     .chatId(chatId)
                     .action(ActionType.TYPING.toString()).build());
-        } catch (TelegramApiException e) {}
+        } catch (TelegramApiException _) {}
     }
 
     private byte[] downloadPhoto(List<PhotoSize> photos) throws TelegramApiException, IOException {
@@ -196,9 +217,20 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
         }
     }
 
-    private void sendMarkdownText(Long chatId, String text) {
-        SendMessage sm = SendMessage.builder().chatId(chatId).text(text).parseMode("Markdown").build();
-        try { telegramClient.execute(sm); } catch (TelegramApiException e) { sendRawText(chatId, text); }
+    private void sendHtmlText(Long chatId, String text) {
+        SendMessage sm = SendMessage.builder()
+                .chatId(chatId)
+                .text(text)
+                .parseMode("HTML")
+                .disableWebPagePreview(true)
+                .build();
+        try {
+            telegramClient.execute(sm);
+        } catch (TelegramApiException e) {
+            log.error("Erro ao enviar HTML Telegram", e);
+            // Fallback para texto puro se falhar o HTML (ex: tag mal fechada)
+            sendRawText(chatId, text);
+        }
     }
 
     private void sendRawText(Long chatId, String text) {
