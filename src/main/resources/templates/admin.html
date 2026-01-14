@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org">
+<html xmlns:th="http://www.thymeleaf.org" lang="pt-BR">
 <head>
     <title>Gepard Admin</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -21,11 +21,15 @@
                 <h5 class="mb-3">Telegram Bot</h5>
                 <div class="mb-3">
                     <label class="form-label">Bot Username</label>
-                    <input type="text" name="telegramBotUsername" class="form-control" th:value="${config.telegramBotUsername}">
+                    <label>
+                        <input type="text" name="telegramBotUsername" class="form-control" th:value="${config.telegramBotUsername}">
+                    </label>
                 </div>
                 <div class="mb-3">
                     <label class="form-label">Bot Token (BotFather)</label>
-                    <input type="password" name="telegramBotToken" class="form-control" th:value="${config.telegramBotToken}">
+                    <label>
+                        <input type="password" name="telegramBotToken" class="form-control" th:value="${config.telegramBotToken}">
+                    </label>
                 </div>
 
                 <hr>
@@ -33,11 +37,15 @@
                 <h5 class="mb-3">Google OAuth2 (Calendar)</h5>
                 <div class="mb-3">
                     <label class="form-label">Client ID</label>
-                    <input type="text" name="googleClientId" class="form-control" th:value="${config.googleClientId}">
+                    <label>
+                        <input type="text" name="googleClientId" class="form-control" th:value="${config.googleClientId}">
+                    </label>
                 </div>
                 <div class="mb-3">
                     <label class="form-label">Client Secret</label>
-                    <input type="password" name="googleClientSecret" class="form-control" th:value="${config.googleClientSecret}">
+                    <label>
+                        <input type="password" name="googleClientSecret" class="form-control" th:value="${config.googleClientSecret}">
+                    </label>
                 </div>
 
                 <hr>
@@ -45,12 +53,14 @@
                 <h5 class="mb-3">Gemini AI</h5>
                 <div class="mb-3">
                     <label class="form-label">Modelo</label>
-                    <select name="geminiModel" class="form-select">
-                        <option value="models/gemini-3-flash-preview" th:selected="${config.geminiModel == 'models/gemini-3-flash-preview'}">Gemini 3 Flash Preview</option>
-                        <option value="models/gemini-3-pro-preview" th:selected="${config.geminiModel == 'models/gemini-3-pro-preview'}">Gemini 3 Pro Preview</option>
-                        <option value="models/gemini-flash-latest" th:selected="${config.geminiModel == 'models/gemini-flash-latest'}">Gemini Flash Latest (Recomendado)</option>
-                        <option value="models/gemini-flash-lite-latest" th:selected="${config.geminiModel == 'models/gemini-flash-lite-latest'}">Gemini Flash Lite Latest (Rápido)</option>
-                    </select>
+                    <label>
+                        <select name="geminiModel" class="form-select">
+                            <option value="models/gemini-3-flash-preview" th:selected="${config.geminiModel == 'models/gemini-3-flash-preview'}">Gemini 3 Flash Preview</option>
+                            <option value="models/gemini-3-pro-preview" th:selected="${config.geminiModel == 'models/gemini-3-pro-preview'}">Gemini 3 Pro Preview</option>
+                            <option value="models/gemini-flash-latest" th:selected="${config.geminiModel == 'models/gemini-flash-latest'}">Gemini Flash Latest (Recomendado)</option>
+                            <option value="models/gemini-flash-lite-latest" th:selected="${config.geminiModel == 'models/gemini-flash-lite-latest'}">Gemini Flash Lite Latest (Rápido)</option>
+                        </select>
+                    </label>
                 </div>
 
                 <button type="submit" class="btn btn-success w-100">Salvar Alterações</button>

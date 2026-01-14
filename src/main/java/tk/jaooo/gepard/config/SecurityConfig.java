@@ -1,41 +1,44 @@
 package tk.jaooo.gepard.config;
 
+import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.core.userdetails.User;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.provisioning.InMemoryUserDetailsManager;
+import org.springframework.security.config.annotation.web.configurers.HeadersConfigurer;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import tk.jaooo.gepard.service.CustomAdminDetailsService;
 
 @Configuration
 @EnableWebSecurity
+@RequiredArgsConstructor
 public class SecurityConfig {
 
+    private final CustomAdminDetailsService adminDetailsService;
+
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) {
         http
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/", "/login/oauth2/code/google", "/error", "/user/config/**").permitAll()
-                        .requestMatchers("/admin/**").authenticated() // Admin precisa de senha
-                        .anyRequest().permitAll() // Facilita webhook do Telegram se houver
+                        .requestMatchers("/admin/setup").authenticated()
+                        .requestMatchers("/admin/**").hasRole("ADMIN")
+                        .anyRequest().permitAll()
                 )
-                .formLogin(form -> form.defaultSuccessUrl("/admin", true)) // Login padrão do Spring
+                .userDetailsService(adminDetailsService) // Vincula explicitamente o serviço
+                .formLogin(form -> form
+                        .defaultSuccessUrl("/admin", true)
+                )
                 .csrf(csrf -> csrf.ignoringRequestMatchers("/h2-console/**", "/admin/**", "/user/config/**"))
-                .headers(headers -> headers.frameOptions(f -> f.disable())); // Permite H2 Console
+                .headers(headers -> headers.frameOptions(HeadersConfigurer.FrameOptionsConfig::disable));
 
         return http.build();
     }
 
-    // Cria um usuário admin/admin em memória para acessar o painel
     @Bean
-    public InMemoryUserDetailsManager userDetailsService() {
-        UserDetails user = User.withDefaultPasswordEncoder()
-                .username("admin")
-                .password("admin")
-                .roles("ADMIN")
-                .build();
-        return new InMemoryUserDetailsManager(user);
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
     }
 }

@@ -20,7 +20,7 @@ public class GeminiService {
         this.settingsService = settingsService;
     }
 
-    public String generateContent(String promptText, byte[] imageBytes, AppUser user) {
+    public String generateContent(String promptText, byte[] mediaBytes, String mediaMimeType, AppUser user) {
         String globalModel = settingsService.getConfig().getGeminiModel();
         String userModel = user.getPreferredModel();
         String modelName = (userModel != null && !userModel.isBlank()) ? userModel : globalModel;
@@ -31,10 +31,10 @@ public class GeminiService {
 
             List<Part> parts = new ArrayList<>();
 
-            if (imageBytes != null && imageBytes.length > 0) {
+            if (mediaBytes != null && mediaBytes.length > 0 && mediaMimeType != null) {
                 Blob blob = Blob.builder()
-                        .mimeType("image/jpeg")
-                        .data(imageBytes)
+                        .mimeType(mediaMimeType)
+                        .data(mediaBytes)
                         .build();
                 parts.add(Part.builder().inlineData(blob).build());
             }
@@ -48,7 +48,11 @@ public class GeminiService {
                             "location", Schema.builder().type(Type.Known.STRING).description("Local").build(),
                             "description", Schema.builder().type(Type.Known.STRING).description("Descrição").build(),
                             "startDateTime", Schema.builder().type(Type.Known.STRING).description("Início ISO8601 (-03:00)").build(),
-                            "endDateTime", Schema.builder().type(Type.Known.STRING).description("Fim ISO8601 (-03:00)").build()
+                            "endDateTime", Schema.builder().type(Type.Known.STRING).description("Fim ISO8601 (-03:00)").build(),
+                            "reminders", Schema.builder()
+                                    .type(Type.Known.ARRAY)
+                                    .items(Schema.builder().type(Type.Known.INTEGER).build())
+                                    .description("Se não pedir, avalie de acordo com o evento e defina lembretes da forma que achar necessário (30 é o padrão).").build()
                     ))
                     .required(Arrays.asList("summary", "startDateTime"))
                     .build();
@@ -64,7 +68,17 @@ public class GeminiService {
                     .systemInstruction(
                             Content.builder()
                                     .parts(ImmutableList.of(
-                                            Part.fromText("Você é um assistente de agendamento. Fuso: America/Sao_Paulo (-03:00).")
+                                            Part.fromText("""
+                Você é um assistente de agendamento.
+                Fuso: America/Sao_Paulo (-03:00).
+                Áudios e Imagens devem ser analisados para extrair detalhes do evento.
+                
+                REGRAS DE LEMBRETES (Reminders):
+                1. O campo 'reminders' aceita APENAS números inteiros (minutos).
+                2. Se o usuário pedir '2 dias antes', CALCULE: 2 * 24 * 60 = 2880. Retorne [2880].
+                3. Se pedir '1 semana antes', CALCULE: 7 * 24 * 60 = 10080.
+                4. Se não pedir, avalie de acordo com o evento e defina lembretes da forma que achar necessário (30 é o padrão).
+                """)
                                     ))
                                     .build()
                     )

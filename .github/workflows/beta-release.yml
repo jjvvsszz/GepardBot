@@ -1,9 +1,9 @@
-name: Production Deploy
+name: Beta Release
 
 on:
   push:
     branches:
-      - master
+      - beta
 
 jobs:
   build-and-release:
@@ -25,6 +25,8 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           default_bump: patch
           release_branches: master
+          pre_release_branches: beta
+          append_to_pre_release_tag: beta
           tag_prefix: v
 
       - name: Set up JDK 25
@@ -53,15 +55,15 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ steps.tag_version.outputs.new_tag }}
-          name: Release ${{ steps.tag_version.outputs.new_version }}
+          name: Beta ${{ steps.tag_version.outputs.new_version }}
           body: |
-            ## 🚀 Versão Oficial
+            ## 🚧 Versão Beta
             **Versão:** ${{ steps.tag_version.outputs.new_tag }}
             
-            **Mudanças:**
+            **Changelog:**
             ${{ steps.tag_version.outputs.changelog }}
           draft: false
-          prerelease: false
+          prerelease: true
           files: |
             build/libs/*.jar
             pterodactylEgg/egg-gepard-bot.json

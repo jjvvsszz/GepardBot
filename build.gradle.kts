@@ -35,10 +35,6 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-thymeleaf")
     implementation("com.fasterxml.jackson.core:jackson-databind")
-//    implementation("org.telegram:telegrambots-spring-boot-starter:7.1.0") {
-//        exclude(group = "org.glassfish.grizzly")
-//        exclude(group = "org.glassfish.hk2")
-//    }
     implementation ("org.telegram:telegrambots-springboot-longpolling-starter:9.2.1")
     implementation("org.telegram:telegrambots-client:9.2.1")
     implementation("com.google.genai:google-genai:1.34.0")
