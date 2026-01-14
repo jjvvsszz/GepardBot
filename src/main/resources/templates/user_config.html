@@ -33,9 +33,11 @@
                 <div class="mb-4">
                     <label class="form-label fw-bold">🔑 Gemini API Key</label>
                     <div class="input-group">
-                        <input type="text" name="geminiApiKey" class="form-control"
-                               placeholder="Começa com AIza..."
-                               th:value="${user.geminiApiKey}">
+                        <label>
+                            <input type="text" name="geminiApiKey" class="form-control"
+                                   placeholder="Começa com AIza..."
+                                   th:value="${user.geminiApiKey}">
+                        </label>
                     </div>
                     <div class="form-text">
                         Obtenha gratuitamente no <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a>.
@@ -45,14 +47,16 @@
                 <!-- Seção Modelo de IA -->
                 <div class="mb-4">
                     <label class="form-label fw-bold">🧠 Modelo de IA Preferido</label>
-                    <select name="preferredModel" class="form-select">
-                        <option value="" th:selected="${user.preferredModel == null}">Usar Padrão do Sistema</option>
-                        <option th:each="m : ${availableModels}"
-                                th:value="${m}"
-                                th:text="${m}"
-                                th:selected="${m == user.preferredModel}">
-                        </option>
-                    </select>
+                    <label>
+                        <select name="preferredModel" class="form-select">
+                            <option value="" th:selected="${user.preferredModel == null}">Usar Padrão do Sistema</option>
+                            <option th:each="m : ${availableModels}"
+                                    th:value="${m}"
+                                    th:text="${m}"
+                                    th:selected="${m == user.preferredModel}">
+                            </option>
+                        </select>
+                    </label>
                     <div class="form-text">Escolha modelos "Lite" para maior velocidade ou "Pro" para maior inteligência.</div>
                 </div>
 
@@ -76,7 +80,7 @@
                     </div>
                     <!-- Botão para Trocar Conta (Re-autenticar) -->
                     <a th:href="${googleAuthLink}" class="btn btn-outline-secondary btn-sm w-100">
-                        <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" width="16" class="me-2">
+                        <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" width="16" class="me-2" alt="Google Logo">
                         Trocar Conta Google
                     </a>
                 </div>
@@ -89,7 +93,7 @@
                         <p class="small mb-0">Necessário para criar eventos automaticamente.</p>
                     </div>
                     <a th:href="${googleAuthLink}" class="btn btn-outline-dark w-100">
-                        <img src="https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg" width="20" class="me-2">
+                        <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" width="20" class="me-2" alt="Google Logo">
                         Conectar Google Agenda
                     </a>
                 </div>
