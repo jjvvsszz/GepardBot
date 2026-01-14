@@ -77,7 +77,6 @@ public class GeminiService {
                 1. O campo 'reminders' aceita APENAS números inteiros (minutos).
                 2. Se o usuário pedir '2 dias antes', CALCULE: 2 * 24 * 60 = 2880. Retorne [2880].
                 3. Se pedir '1 semana antes', CALCULE: 7 * 24 * 60 = 10080.
-                4. Se não pedir, avalie de acordo com o evento e defina lembretes da forma que achar necessário (30 é o padrão).
                 """)
                                     ))
                                     .build()
@@ -95,7 +94,7 @@ public class GeminiService {
 
     private String extractTextFromResponse(GenerateContentResponse response) {
         if (response.candidates().isEmpty() || response.candidates().get().isEmpty()) return "{}";
-        Candidate candidate = response.candidates().get().get(0);
+        Candidate candidate = response.candidates().get().getFirst();
         if (candidate.content().isEmpty()) return "{}";
         Content content = candidate.content().get();
         if (content.parts().isEmpty() || content.parts().get().isEmpty()) return "{}";

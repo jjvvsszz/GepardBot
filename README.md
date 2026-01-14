@@ -20,8 +20,8 @@ O bot é capaz de analisar **texto, áudio e imagens** para extrair detalhes de 
 
 O artefato executável (`.jar`) do projeto está disponível na aba de **Releases** do repositório GitHub.
 
-1.  Acesse a aba [Releases](https://github.com/tkjaooo/gepard/releases).
-2.  Baixe a versão mais recente (`Gepard-x.x.x.jar`).
+1.  Acesse a aba [Releases](https://github.com/jjvvsszz/GepardBot/releases).
+2.  Baixe a versão mais recente (ex: `Gepard-1.0.0.jar`).
 
 ---
 
@@ -86,7 +86,7 @@ Ideal para testes locais. Utiliza banco de dados em memória/arquivo (H2 Databas
 Este projeto foi otimizado para rodar em painéis de hospedagem Pterodactyl.
 
 **Instalação via Egg:**
-1.  Baixe o arquivo `egg-gepard-bot.json` fornecido no projeto.
+1.  Baixe o arquivo `egg-gepard-bot.json` disponível nas Releases ou no código fonte.
 2.  No painel admin do Pterodactyl, vá em **Nests > Import Egg**.
 3.  Importe o arquivo JSON.
 4.  Crie um novo servidor usando este Egg.
@@ -94,8 +94,8 @@ Este projeto foi otimizado para rodar em painéis de hospedagem Pterodactyl.
 **Configuração no Painel:**
 O Egg solicitará todas as variáveis necessárias na aba "Startup":
 *   **Docker Image:** O Egg usa `ghcr.io/pterodactyl/yolks:java_25` (Suporte nativo ao Java 25).
-*   **Database:** Crie uma Database no painel do Pterodactyl para o servidor. Copie as credenciais para as variáveis na aba "Startup".
-*   **Auto-Update:** Se preencher `GITHUB_USER_REPO` (ex: `seu-usuario/gepard`) e `GITHUB_PAT` (Personal Access Token), o servidor baixará a release mais recente automaticamente ao iniciar.
+*   **Database:** Crie uma Database no painel do Pterodactyl para o servidor. O Egg detectará as credenciais automaticamente.
+*   **Auto-Update:** O servidor baixará e instalará a versão mais recente do repositório oficial automaticamente a cada reinicialização. Não é necessário configurar tokens do GitHub.
 
 ---
 
