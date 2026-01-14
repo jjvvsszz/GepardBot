@@ -96,6 +96,7 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
                 
                 <i>(O link é seguro e exclusivo para você)</i>
                 """.formatted(link);
+                sendHtmlText(chatId, msg);
                 return;
             }
 
