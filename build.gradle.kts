@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "tk.jaooo"
-version = "0.0.1-SNAPSHOT"
+version = project.findProperty("version") ?: "0.0.1-SNAPSHOT"
 description = "Gepard"
 
 java {
