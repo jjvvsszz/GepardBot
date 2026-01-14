@@ -86,26 +86,16 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
             );
 
             if (text.equals("/config") || text.equals("/start")) {
-                String token = java.util.UUID.randomUUID().toString();
-                user.setWebLoginToken(token);
-                userRepository.save(user);
-
-                String link = baseUrl + "/user/config?token=" + token;
+                String link = generateSettingsURL(user);
 
                 String msg = """
                 ⚙️ <b>Painel de Configuração</b>
-                
                 Clique no link abaixo para gerenciar sua Chave Gemini e conectar sua Agenda:
                 
                 👉 <a href="%s">Abrir Minhas Configurações</a>
                 
                 <i>(O link é seguro e exclusivo para você)</i>
-                
-                Caso não abra, copie:
-                <code>%s</code>
-                """.formatted(link, link);
-
-                sendHtmlText(chatId, msg);
+                """.formatted(link);
                 return;
             }
 
@@ -118,7 +108,6 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
                 String authLink = calendarService.buildAuthorizationUrl(telegramId);
                 String msg = """
                         📅 <b>Permissão necessária</b>
-                        
                         <a href="%s">Clique aqui para conectar sua Agenda</a>
                         """.formatted(authLink);
                 sendHtmlText(chatId, msg);
@@ -138,10 +127,27 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
         if (text.startsWith("AIza")) {
             user.setGeminiApiKey(text);
             userRepository.save(user);
-            sendHtmlText(message.getChatId(), "✅ <b>API Key Salva!</b>\nAgora mande o evento (texto ou foto).");
+            String authLink = calendarService.buildAuthorizationUrl(user.getTelegramId());
+            String linkSettings = generateSettingsURL(user);
+            sendHtmlText(message.getChatId(), """
+                    ✅ <b>API Key Salva!</b>
+                    <a href="%s">Clique aqui para conectar sua Agenda</a>.
+                    <a href="%s">Clique aqui configurar o bot</a>.
+                    """.formatted(authLink, linkSettings));
         } else {
-            sendHtmlText(message.getChatId(), "👋 Envie sua <b>Gemini API Key</b> para começar.");
+            sendHtmlText(message.getChatId(), """
+        👋 Envie sua <b>Gemini API Key</b> para começar.
+        <a href="%s">Obtenha aqui sua API Key</a>
+        """.formatted("https://aistudio.google.com/api-keys"));
         }
+    }
+
+    private String generateSettingsURL(AppUser user) {
+        String token = java.util.UUID.randomUUID().toString();
+        user.setWebLoginToken(token);
+        userRepository.save(user);
+
+        return baseUrl + "/user/config?token=" + token;
     }
 
     private void handleSmartScheduling(Message message, AppUser user) {
