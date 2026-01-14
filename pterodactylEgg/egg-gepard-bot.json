@@ -4,7 +4,7 @@
     "version": "PTDL_v2",
     "update_url": null
   },
-  "exported_at": "2026-01-14T13:37:20-05:00",
+  "exported_at": "2026-01-14T14:04:15-05:00",
   "name": "Gepard Bot",
   "author": "jjvvsszz.gamer@gmail.com",
   "description": null,
@@ -22,7 +22,7 @@
   },
   "scripts": {
     "installation": {
-      "script": "apt-get update -y && apt-get install -y curl jq\r\n\r\nGITHUB_REPO=\"jjvvsszz\/GepardBot\"\r\n\r\necho -e \"\u2b07\ufe0f  Buscando a \u00faltima release em ${GITHUB_REPO}...\"\r\n\r\nDOWNLOAD_URL=$(curl -s \"https:\/\/api.github.com\/repos\/${GITHUB_REPO}\/releases\/latest\" | jq -r '.assets[] | select(.name | endswith(\".jar\")) | .browser_download_url' | head -n 1)\r\n\r\nif [ -z \"${DOWNLOAD_URL}\" ] || [ \"${DOWNLOAD_URL}\" == \"null\" ]; then\r\n    echo -e \"\u274c Erro: Nenhum arquivo JAR encontrado na \u00faltima release.\"\r\n    echo -e \"\u2139\ufe0f  Verifique se a release foi publicada corretamente no GitHub.\"\r\n    exit 1\r\nelse\r\n    echo -e \"\ud83d\udd17 Encontrado: ${DOWNLOAD_URL}\"\r\n    echo -e \"\ud83d\udce5 Baixando para ${SERVER_JARFILE}...\"\r\n    \r\n    curl -L -o \"${SERVER_JARFILE}\" \"${DOWNLOAD_URL}\"\r\n    \r\n    if [ -f \"${SERVER_JARFILE}\" ]; then\r\n        echo -e \"\u2705 Instala\u00e7\u00e3o conclu\u00edda com sucesso!\"\r\n    else\r\n        echo -e \"\u274c Falha ao salvar o arquivo.\"\r\n        exit 1\r\n    fi\r\nfi",
+      "script": "cd \/mnt\/server\r\n\r\napt-get update -y && apt-get install -y curl jq\r\n\r\nGITHUB_REPO=\"jjvvsszz\/GepardBot\"\r\n\r\necho -e \"\u2b07\ufe0f  Buscando a \u00faltima release em ${GITHUB_REPO}...\"\r\n\r\nDOWNLOAD_URL=$(curl -s \"https:\/\/api.github.com\/repos\/${GITHUB_REPO}\/releases\/latest\" | jq -r '.assets[] | select(.name | endswith(\".jar\")) | .browser_download_url' | head -n 1)\r\n\r\nif [ -z \"${DOWNLOAD_URL}\" ] || [ \"${DOWNLOAD_URL}\" == \"null\" ]; then\r\n    echo -e \"\u274c Erro: Nenhum arquivo JAR encontrado na \u00faltima release.\"\r\n    exit 1\r\nelse\r\n    echo -e \"\ud83d\udd17 Encontrado: ${DOWNLOAD_URL}\"\r\n    echo -e \"\ud83d\udce5 Baixando para \/mnt\/server\/${SERVER_JARFILE}...\"\r\n    \r\n    curl -L -o \"${SERVER_JARFILE}\" \"${DOWNLOAD_URL}\"\r\n    \r\n    if [ -f \"${SERVER_JARFILE}\" ]; then\r\n        echo -e \"\u2705 Instala\u00e7\u00e3o conclu\u00edda com sucesso!\"\r\n    else\r\n        echo -e \"\u274c Falha ao salvar o arquivo.\"\r\n        exit 1\r\n    fi\r\nfi",
       "container": "debian:bookworm-slim",
       "entrypoint": "bash"
     }
