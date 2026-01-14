@@ -16,9 +16,8 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Necessário para calcular o histórico de versões
+          fetch-depth: 0
 
-      # 1. Calcula e Cria a Tag Beta (ex: v0.0.2-beta.1)
       - name: Bump Version and Push Tag
         id: tag_version
         uses: mathieudutour/github-tag-action@v6.2
@@ -27,7 +26,7 @@ jobs:
           default_bump: patch
           release_branches: main
           pre_release_branches: beta
-          append_to_pre_release_tag: beta # Gera o sufixo -beta.X
+          append_to_pre_release_tag: beta
           tag_prefix: v
 
       - name: Set up JDK 25
@@ -36,7 +35,6 @@ jobs:
           java-version: '25'
           distribution: 'temurin'
 
-      # 2. Atualiza o build.gradle.kts com a versão calculada (sem o 'v')
       - name: Update Gradle Version
         run: |
           sed -i 's/version = .*/version = "${{ steps.tag_version.outputs.new_version }}"/' build.gradle.kts
@@ -44,10 +42,12 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
 
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
       - name: Build with Gradle
         run: ./gradlew clean build -x test
 
-      # 3. Cria a Release no GitHub marcada como Pre-release
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
@@ -60,6 +60,6 @@ jobs:
             **Changelog:**
             ${{ steps.tag_version.outputs.changelog }}
           draft: false
-          prerelease: true # ISSO É IMPORTANTE
+          prerelease: true
           files: |
             build/libs/*.jar
