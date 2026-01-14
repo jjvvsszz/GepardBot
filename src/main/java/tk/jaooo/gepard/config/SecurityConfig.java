@@ -22,7 +22,7 @@ public class SecurityConfig {
                         .anyRequest().permitAll() // Facilita webhook do Telegram se houver
                 )
                 .formLogin(form -> form.defaultSuccessUrl("/admin", true)) // Login padrão do Spring
-                .csrf(csrf -> csrf.ignoringRequestMatchers("/h2-console/**", "/admin/**")) // Ignora CSRF para H2 e Admin simples
+                .csrf(csrf -> csrf.ignoringRequestMatchers("/h2-console/**", "/admin/**", "/user/config/**"))
                 .headers(headers -> headers.frameOptions(f -> f.disable())); // Permite H2 Console
 
         return http.build();

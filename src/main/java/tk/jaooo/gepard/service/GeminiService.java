@@ -6,6 +6,7 @@ import com.google.genai.Client;
 import com.google.genai.types.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import tk.jaooo.gepard.model.AppUser;
 
 import java.util.*;
 
@@ -19,15 +20,18 @@ public class GeminiService {
         this.settingsService = settingsService;
     }
 
-    public String generateContent(String promptText, byte[] imageBytes, String userApiKey) {
-        String modelName = settingsService.getConfig().getGeminiModel();
-        try (Client client = Client.builder().apiKey(userApiKey).build()) {
+    public String generateContent(String promptText, byte[] imageBytes, AppUser user) {
+        String globalModel = settingsService.getConfig().getGeminiModel();
+        String userModel = user.getPreferredModel();
+        String modelName = (userModel != null && !userModel.isBlank()) ? userModel : globalModel;
+
+        log.info("Gerando conteúdo para User {} usando modelo: {}", user.getTelegramId(), modelName);
+
+        try (Client client = Client.builder().apiKey(user.getGeminiApiKey()).build()) {
 
             List<Part> parts = new ArrayList<>();
 
-            // CORREÇÃO: Passar bytes diretos, a lib converte pra Base64
             if (imageBytes != null && imageBytes.length > 0) {
-                log.info("Anexando imagem de {} bytes...", imageBytes.length);
                 Blob blob = Blob.builder()
                         .mimeType("image/jpeg")
                         .data(imageBytes)
@@ -35,7 +39,6 @@ public class GeminiService {
                 parts.add(Part.builder().inlineData(blob).build());
             }
 
-            // Texto depois da imagem
             parts.add(Part.fromText(promptText));
 
             Schema eventSchema = Schema.builder()

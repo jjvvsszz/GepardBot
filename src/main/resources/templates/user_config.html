@@ -25,10 +25,11 @@
                 <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
             </div>
 
-            <!-- FORMULÁRIO GEMINI -->
+            <!-- FORMULÁRIO GERAL -->
             <form action="/user/config/save" method="post">
                 <input type="hidden" name="token" th:value="${user.webLoginToken}">
 
+                <!-- Seção Gemini API Key -->
                 <div class="mb-4">
                     <label class="form-label fw-bold">🔑 Gemini API Key</label>
                     <div class="input-group">
@@ -41,7 +42,21 @@
                     </div>
                 </div>
 
-                <button type="submit" class="btn btn-primary w-100">Salvar Chave</button>
+                <!-- Seção Modelo de IA -->
+                <div class="mb-4">
+                    <label class="form-label fw-bold">🧠 Modelo de IA Preferido</label>
+                    <select name="preferredModel" class="form-select">
+                        <option value="" th:selected="${user.preferredModel == null}">Usar Padrão do Sistema</option>
+                        <option th:each="m : ${availableModels}"
+                                th:value="${m}"
+                                th:text="${m}"
+                                th:selected="${m == user.preferredModel}">
+                        </option>
+                    </select>
+                    <div class="form-text">Escolha modelos "Lite" para maior velocidade ou "Pro" para maior inteligência.</div>
+                </div>
+
+                <button type="submit" class="btn btn-primary w-100">Salvar Configurações</button>
             </form>
 
             <hr class="my-4">
@@ -50,18 +65,29 @@
             <div class="mb-3">
                 <label class="form-label fw-bold">📅 Google Agenda</label>
 
-                <div th:if="${user.isGoogleConnected()}" class="alert alert-success d-flex align-items-center">
-                    <span class="status-dot connected"></span>
-                    <div>
-                        <strong>Conectado!</strong><br>
-                        <small>O bot tem permissão para agendar.</small>
+                <!-- Caso Conectado -->
+                <div th:if="${user.isGoogleConnected()}">
+                    <div class="alert alert-success d-flex align-items-center mb-2">
+                        <span class="status-dot connected"></span>
+                        <div>
+                            <strong>Conectado!</strong><br>
+                            <small>O bot tem permissão para agendar.</small>
+                        </div>
                     </div>
+                    <!-- Botão para Trocar Conta (Re-autenticar) -->
+                    <a th:href="${googleAuthLink}" class="btn btn-outline-secondary btn-sm w-100">
+                        <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" width="16" class="me-2">
+                        Trocar Conta Google
+                    </a>
                 </div>
 
-                <div th:if="${!user.isGoogleConnected()}" class="alert alert-warning">
-                    <span class="status-dot disconnected"></span>
-                    <strong>Não conectado</strong>
-                    <p class="small mb-2">Necessário para criar eventos automaticamente.</p>
+                <!-- Caso Desconectado -->
+                <div th:if="${!user.isGoogleConnected()}">
+                    <div class="alert alert-warning mb-2">
+                        <span class="status-dot disconnected"></span>
+                        <strong>Não conectado</strong>
+                        <p class="small mb-0">Necessário para criar eventos automaticamente.</p>
+                    </div>
                     <a th:href="${googleAuthLink}" class="btn btn-outline-dark w-100">
                         <img src="https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg" width="20" class="me-2">
                         Conectar Google Agenda

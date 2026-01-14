@@ -23,6 +23,9 @@ public class AppUser {
     @Column(length = 100)
     private String geminiApiKey;
 
+    @Column(length = 50)
+    private String preferredModel;
+
     @Column(length = 2048)
     private String googleRefreshToken;
 

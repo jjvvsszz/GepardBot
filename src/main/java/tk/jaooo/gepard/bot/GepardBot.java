@@ -147,7 +147,7 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
             String fullPrompt = String.format("Hoje é %s (Fuso America/Sao_Paulo). O usuário pede: %s",
                     nowSP.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME), prompt);
 
-            String jsonResponse = geminiService.generateContent(fullPrompt, imageBytes, user.getGeminiApiKey());
+            String jsonResponse = geminiService.generateContent(fullPrompt, imageBytes, user);
             EventExtractionDTO eventDTO = objectMapper.readValue(jsonResponse, EventExtractionDTO.class);
             String eventLink = calendarService.createEvent(user, eventDTO);
 
@@ -157,7 +157,6 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
                     "[Ver no Google Agenda](" + eventLink + ")");
 
         } catch (RuntimeException e) {
-            // CORREÇÃO: Tratamento genérico verificando a causa ou mensagem
             Throwable cause = e.getCause();
             String errorMsg = e.getMessage();
 
