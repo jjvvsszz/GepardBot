@@ -12,6 +12,7 @@ import com.google.api.client.util.DateTime;
 import com.google.api.services.calendar.Calendar;
 import com.google.api.services.calendar.model.Event;
 import com.google.api.services.calendar.model.EventDateTime;
+import com.google.api.services.calendar.model.EventReminder;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -24,6 +25,7 @@ import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -138,6 +140,20 @@ public class GoogleCalendarService {
 
         event.setStart(new EventDateTime().setDateTime(start).setTimeZone(timeZone));
         event.setEnd(new EventDateTime().setDateTime(end).setTimeZone(timeZone));
+
+        if (eventData.reminders() != null && !eventData.reminders().isEmpty()) {
+            List<EventReminder> reminderList = eventData.reminders().stream()
+                    .map(minutes -> new EventReminder().setMethod("popup").setMinutes(minutes))
+                    .collect(Collectors.toList());
+
+            Event.Reminders reminders = new Event.Reminders()
+                    .setUseDefault(false)
+                    .setOverrides(reminderList);
+
+            event.setReminders(reminders);
+        } else {
+            event.setReminders(new Event.Reminders().setUseDefault(true));
+        }
 
         Event createdEvent = service.events().insert("primary", event).execute();
         return createdEvent.getHtmlLink();
