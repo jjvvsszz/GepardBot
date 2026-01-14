@@ -4,6 +4,7 @@ import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tk.jaooo.gepard.model.GlobalConfig;
@@ -15,24 +16,36 @@ import tk.jaooo.gepard.repository.GlobalConfigRepository;
 public class SystemSettingsService {
 
     private final GlobalConfigRepository repository;
+    private final PasswordEncoder passwordEncoder;
 
-    // Valores iniciais (Fallback do application.yml)
-    @Value("${gepard.telegram.bot-token}") private String envBotToken;
-    @Value("${gepard.telegram.bot-username}") private String envBotUsername;
-    @Value("${spring.security.oauth2.client.registration.google.client-id}") private String envClientId;
-    @Value("${spring.security.oauth2.client.registration.google.client-secret}") private String envClientSecret;
+    // Fallbacks
+    @Value("${gepard.telegram.bot-token:}") private String envBotToken;
+    @Value("${gepard.telegram.bot-username:}") private String envBotUsername;
+    @Value("${spring.security.oauth2.client.registration.google.client-id:}") private String envClientId;
+    @Value("${spring.security.oauth2.client.registration.google.client-secret:}") private String envClientSecret;
 
     @PostConstruct
     public void init() {
         if (repository.count() == 0) {
-            log.info("Inicializando configurações globais com valores de ambiente...");
+            log.info("⚙️ Inicializando configurações globais...");
+
+            String tempPassword = java.util.UUID.randomUUID().toString().substring(0, 8);
+
+            log.warn("⚠️ ATENÇÃO: PRIMEIRO ACESSO ADMIN ⚠️");
+            log.warn("Usuário: admin");
+            log.warn("Senha Temporária: {}", tempPassword);
+            log.warn("Você será obrigado a mudar esta senha ao logar.");
+
             GlobalConfig config = GlobalConfig.builder()
                     .id(1L)
+                    .adminUsername("admin")
+                    .adminPasswordHash(passwordEncoder.encode(tempPassword))
+                    .adminSetupRequired(true)
                     .telegramBotToken(envBotToken)
                     .telegramBotUsername(envBotUsername)
                     .googleClientId(envClientId)
                     .googleClientSecret(envClientSecret)
-                    .geminiModel("models/gemini-3-flash-preview")
+                    .geminiModel("gemini-1.5-flash")
                     .build();
             repository.save(config);
         }
@@ -51,7 +64,14 @@ public class SystemSettingsService {
         config.setGoogleClientSecret(clientSecret);
         config.setGeminiModel(model);
         repository.save(config);
-        // Nota: Para aplicar mudanças de Token do Bot ou Google ID em tempo real,
-        // seria necessário reiniciar os Beans. Por simplicidade, pediremos restart manual no painel.
+    }
+
+    @Transactional
+    public void updateAdminCredentials(String newUsername, String newPassword) {
+        GlobalConfig config = getConfig();
+        config.setAdminUsername(newUsername);
+        config.setAdminPasswordHash(passwordEncoder.encode(newPassword));
+        config.setAdminSetupRequired(false); // Libera o acesso
+        repository.save(config);
     }
 }

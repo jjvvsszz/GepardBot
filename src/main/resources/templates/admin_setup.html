@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>Gepard - Configuração Inicial</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-dark d-flex align-items-center justify-content-center" style="height: 100vh;">
+<div class="card p-4 shadow-lg" style="width: 400px;">
+    <div class="text-center mb-4">
+        <h3>🛡️ Segurança</h3>
+        <p class="text-muted">Este é seu primeiro acesso. Defina um usuário e senha permanentes para o painel.</p>
+    </div>
+
+    <form action="/admin/setup/save" method="post">
+        <div class="mb-3">
+            <label class="form-label">Novo Usuário</label>
+            <input type="text" name="username" class="form-control" required placeholder="Ex: admin">
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Nova Senha</label>
+            <input type="password" name="password" class="form-control" required minlength="6">
+        </div>
+        <button type="submit" class="btn btn-danger w-100">Definir e Acessar</button>
+    </form>
+</div>
+</body>
+</html>
