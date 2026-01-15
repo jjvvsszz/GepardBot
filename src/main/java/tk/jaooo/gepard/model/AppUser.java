@@ -2,6 +2,7 @@ package tk.jaooo.gepard.model;
 
 import jakarta.persistence.*;
 import lombok.*;
+import tk.jaooo.gepard.util.StringCryptoConverter;
 
 import java.time.LocalDateTime;
 
@@ -20,25 +21,36 @@ public class AppUser {
     private String username;
     private String firstName;
 
-    @Column(length = 100)
+    @Convert(converter = StringCryptoConverter.class)
+    @Column
     private String geminiApiKey;
 
     @Column(length = 50)
     private String preferredModel;
 
-    @Column(length = 2048)
+    @Convert(converter = StringCryptoConverter.class)
+    @Column(length = 4096)
     private String googleRefreshToken;
 
-    @Column(length = 2048)
+    @Convert(converter = StringCryptoConverter.class)
+    @Column(length = 4096)
     private String googleAccessToken;
 
     private String webLoginToken;
 
     private LocalDateTime createdAt;
 
+    private LocalDateTime updatedAt;
+
     @PrePersist
     public void onCreate() {
         this.createdAt = LocalDateTime.now();
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    @PreUpdate
+    public void onUpdate() {
+        this.updatedAt = LocalDateTime.now();
     }
 
     public boolean hasApiKey() {

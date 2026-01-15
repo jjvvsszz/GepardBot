@@ -1,7 +1,5 @@
 server:
-  # Pterodactyl injeta SERVER_PORT. Se não houver, usa 8080.
   port: ${SERVER_PORT:8080}
-  # Necessário para entender que está atrás de um proxy (se usar https://gepard.jaooo.tk)
   forward-headers-strategy: framework
 
 spring:
@@ -33,14 +31,15 @@ spring:
           google:
             authorization-uri: https://accounts.google.com/o/oauth2/v2/auth?access_type=offline&prompt=consent
 
-# --- CONFIGURAÇÃO CUSTOMIZADA ---
 gepard:
-  # Define a URL pública. No Pterodactyl, definiremos isso na variável APP_BASE_URL
   base-url: ${APP_BASE_URL:http://localhost:${server.port}}
 
   telegram:
     bot-username: ${TELEGRAM_BOT_USERNAME}
     bot-token: ${TELEGRAM_BOT_TOKEN}
+
+  security:
+    encryption-key: ${APP_ENCRYPTION_KEY:ChavePadraoParaDesenvolvimento32}
 
 ---
 # --- AMBIENTE DE DESENVOLVIMENTO (H2) ---
