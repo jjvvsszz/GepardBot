@@ -45,15 +45,16 @@ public class SecurityMigrationService implements ApplicationRunner {
             }
 
             if (changed) {
-                userRepository.save(user);
+                user.setUpdatedAt(java.time.LocalDateTime.now());
+                userRepository.saveAndFlush(user);
                 migratedCount++;
             }
         }
 
         if (migratedCount > 0) {
-            log.info("✅ MIGRAÇÃO CONCLUÍDA: {} usuários tiveram suas credenciais criptografadas.", migratedCount);
+            log.info("MIGRAÇÃO CONCLUÍDA: {} usuários tiveram suas credenciais criptografadas e persistidas.", migratedCount);
         } else {
-            log.info("🛡️ Todos os dados já estão seguros.");
+            log.info("Todos os dados já estão seguros.");
         }
     }
 
