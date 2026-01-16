@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 import tk.jaooo.gepard.model.AppUser;
 import tk.jaooo.gepard.repository.AppUserRepository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Slf4j
@@ -22,43 +23,20 @@ public class SecurityMigrationService implements ApplicationRunner {
     @Override
     @Transactional
     public void run(@NonNull ApplicationArguments args) {
-        log.info("🔐 Verificando necessidade de migração de criptografia...");
+        List<AppUser> vulnerableUsers = userRepository.findUsersWithUnencryptedData();
 
-        List<AppUser> users = userRepository.findAll();
-        int migratedCount = 0;
-
-        for (AppUser user : users) {
-            boolean changed = false;
-
-            if (isUnencrypted(user.getGeminiApiKey())) {
-                user.setGeminiApiKey(user.getGeminiApiKey());
-                changed = true;
-            }
-
-            if (isUnencrypted(user.getGoogleRefreshToken())) {
-                user.setGoogleRefreshToken(user.getGoogleRefreshToken());
-                changed = true;
-            }
-            if (isUnencrypted(user.getGoogleAccessToken())) {
-                user.setGoogleAccessToken(user.getGoogleAccessToken());
-                changed = true;
-            }
-
-            if (changed) {
-                user.setUpdatedAt(java.time.LocalDateTime.now());
-                userRepository.saveAndFlush(user);
-                migratedCount++;
-            }
+        if (vulnerableUsers.isEmpty()) {
+            log.info("🛡️ Verificação de segurança: Todos os dados já estão criptografados no banco.");
+            return;
         }
 
-        if (migratedCount > 0) {
-            log.info("MIGRAÇÃO CONCLUÍDA: {} usuários tiveram suas credenciais criptografadas e persistidas.", migratedCount);
-        } else {
-            log.info("Todos os dados já estão seguros.");
-        }
-    }
+        log.info("Encontrados {} usuários com dados expostos. Iniciando criptografia...", vulnerableUsers.size());
 
-    private boolean isUnencrypted(String value) {
-        return value != null && !value.isBlank() && !value.startsWith("{ENC}");
+        for (AppUser user : vulnerableUsers) {
+            user.setUpdatedAt(LocalDateTime.now());
+            userRepository.saveAndFlush(user);
+        }
+
+        log.info("MIGRAÇÃO CRÍTICA CONCLUÍDA: {} usuários protegidos.", vulnerableUsers.size());
     }
 }
