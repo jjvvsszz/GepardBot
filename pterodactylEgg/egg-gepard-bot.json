@@ -4,7 +4,7 @@
     "version": "PTDL_v2",
     "update_url": null
   },
-  "exported_at": "2026-01-14T14:04:15-05:00",
+  "exported_at": "2026-01-15T19:45:53-05:00",
   "name": "Gepard Bot",
   "author": "jjvvsszz.gamer@gmail.com",
   "description": null,
@@ -196,6 +196,16 @@
       "user_viewable": true,
       "user_editable": true,
       "rules": "required|string",
+      "field_type": "text"
+    },
+    {
+      "name": "Encryption Key",
+      "description": "",
+      "env_variable": "APP_ENCRYPTION_KEY",
+      "default_value": "ALTERAR",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|string|max:32",
       "field_type": "text"
     }
   ]
