@@ -107,13 +107,13 @@ O bot utiliza uma string de conexão JDBC específica para conexões seguras (TC
 
 **Variáveis Necessárias (`prod`):**
 
-| Variável | Descrição | Como obter no OCI |
-| :--- | :--- | :--- |
-| `ORACLE_HOST` | Host do banco | Na tela do DB, clique em "DB Connection". Copie o host da string (ex: `adb.sa-saopaulo-1.oraclecloud.com`). |
-| `ORACLE_SERVICE_NAME` | Nome do serviço | Geralmente termina em `_high`, `_medium` ou `_low` (ex: `g12345_meubanco_high.adb...`). |
-| `ORACLE_DB_USER` | Usuário | Padrão: `ADMIN`. |
-| `ORACLE_DB_PASSWORD` | Senha | A senha definida na criação do Autonomous Database. |
-| `ORACLE_CERT_DN` | Distinguished Name do Certificado | Encontrado na string de conexão do OCI, parâmetro `ssl_server_cert_dn`. Ex: `CN=adb.sa-saopaulo-1.oraclecloud.com, O=Oracle Corporation...` |
+| Variável              | Descrição                         | Como obter no OCI                                                                                                                           |
+|:----------------------|:----------------------------------|:--------------------------------------------------------------------------------------------------------------------------------------------|
+| `ORACLE_HOST`         | Host do banco                     | Na tela do DB, clique em "DB Connection". Copie o host da string (ex: `adb.sa-saopaulo-1.oraclecloud.com`).                                 |
+| `ORACLE_SERVICE_NAME` | Nome do serviço                   | Geralmente termina em `_high`, `_medium` ou `_low` (ex: `g12345_meubanco_high.adb...`).                                                     |
+| `ORACLE_DB_USER`      | Usuário                           | Padrão: `ADMIN`.                                                                                                                            |
+| `ORACLE_DB_PASSWORD`  | Senha                             | A senha definida na criação do Autonomous Database.                                                                                         |
+| `ORACLE_CERT_DN`      | Distinguished Name do Certificado | Encontrado na string de conexão do OCI, parâmetro `ssl_server_cert_dn`. Ex: `CN=adb.sa-saopaulo-1.oraclecloud.com, O=Oracle Corporation...` |
 
 **Comando de Execução:**
 ```bash

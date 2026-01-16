@@ -117,8 +117,20 @@ public class GoogleCalendarService {
         credential.setAccessToken(user.getGoogleAccessToken());
         credential.setRefreshToken(user.getGoogleRefreshToken());
 
+        if (credential.getExpiresInSeconds() != null && credential.getExpiresInSeconds() <= 60) {
+            try {
+                credential.refreshToken();
+                user.setGoogleAccessToken(credential.getAccessToken());
+                userRepository.save(user);
+            } catch (IOException e) {
+                log.error("Falha ao renovar token", e);
+                throw new IllegalStateException("Sessão Google expirada. Conecte novamente.");
+            }
+        }
+
         Calendar service = new Calendar.Builder(
                 GoogleNetHttpTransport.newTrustedTransport(), JSON_FACTORY, credential)
+                .setHttpRequestInitializer(credential)
                 .setApplicationName("Gepard Bot")
                 .build();
 
