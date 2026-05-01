@@ -314,6 +314,14 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
 
             EventExtractionDTO eventDTO = objectMapper.readValue(jsonResponse, EventExtractionDTO.class);
 
+            if (eventDTO.summary() == null || eventDTO.summary().isBlank()
+                    || eventDTO.startDateTime() == null || eventDTO.startDateTime().isBlank()) {
+                log.warn("IA retornou dados incompletos para usuario {}: summary={}, startDateTime={}",
+                        user.getTelegramId(), eventDTO.summary(), eventDTO.startDateTime());
+                sendRawText(chatId, "❌ Nao consegui extrair os dados do evento. Tente descrever com mais detalhes.");
+                return;
+            }
+
             pendingEvents.put(telegramId, eventDTO);
 
             String safeSummary = HtmlUtils.htmlEscape(eventDTO.summary());

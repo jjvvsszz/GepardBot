@@ -41,12 +41,24 @@ public class DeepSeekService {
                 Voce e um assistente de agendamento.
                 Fuso: America/Sao_Paulo (-03:00).
                 Extraia detalhes do evento do texto do usuario.
-                Retorne a resposta em formato JSON.
                 
-                REGRAS DE LEMBRETES (Reminders):
-                1. O campo 'reminders' aceita APENAS numeros inteiros (minutos).
-                2. Se o usuario pedir '2 dias antes', CALCULE: 2 * 24 * 60 = 2880. Retorne [2880].
-                3. Se pedir '1 semana antes', CALCULE: 7 * 24 * 60 = 10080.
+                Retorne APENAS um objeto JSON com este formato exato:
+                {
+                  "summary": "titulo curto do evento",
+                  "startDateTime": "data e hora ISO8601 com -03:00 (ex: 2026-05-10T20:00:00-03:00)",
+                  "endDateTime": "data e hora ISO8601 com -03:00 (opcional)",
+                  "location": "local (opcional)",
+                  "description": "descricao (opcional)",
+                  "reminders": [30]
+                }
+                
+                REGRAS:
+                1. Os campos 'summary' e 'startDateTime' sao OBRIGATORIOS.
+                2. 'reminders' deve ser um array de numeros inteiros (minutos antes do evento).
+                3. Se o usuario pedir '2 dias antes', CALCULE: 2 * 24 * 60 = 2880. Retorne [2880].
+                4. Se o usuario pedir '1 semana antes', CALCULE: 7 * 24 * 60 = 10080.
+                5. Se nao especificar lembretes, retorne [30] (padrao 30 minutos).
+                6. Se nao especificar horario de fim, NAO inclua 'endDateTime' ou retorne null.
                 """);
             messages.add(systemMsg);
 
