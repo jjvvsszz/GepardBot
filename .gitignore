@@ -35,3 +35,13 @@ out/
 
 ### VS Code ###
 .vscode/
+
+### Secrets & Data ###
+.env
+*.pem
+credentials.json
+token.pickle
+data/
+*.jks
+*.keystore
+application-local.yml

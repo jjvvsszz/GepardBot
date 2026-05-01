@@ -1,6 +1,9 @@
 package tk.jaooo.gepard.bot;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.api.client.util.DateTime;
+import com.google.api.services.calendar.model.Event;
+import com.google.api.services.calendar.model.EventDateTime;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -16,50 +19,64 @@ import org.telegram.telegrambots.meta.api.objects.File;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.message.Message;
 import org.telegram.telegrambots.meta.api.objects.photo.PhotoSize;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardMarkup;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardRow;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardRow;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.telegram.telegrambots.meta.generics.TelegramClient;
+import tk.jaooo.gepard.config.BotConfig;
 import tk.jaooo.gepard.model.AppUser;
 import tk.jaooo.gepard.model.dto.EventExtractionDTO;
 import tk.jaooo.gepard.repository.AppUserRepository;
-import tk.jaooo.gepard.service.GeminiService;
+import tk.jaooo.gepard.service.AiService;
 import tk.jaooo.gepard.service.GoogleCalendarService;
 import tk.jaooo.gepard.service.SystemSettingsService;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
+import java.time.*;
 import java.time.format.DateTimeFormatter;
-import java.util.Comparator;
-import java.util.List;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @Component
 public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadUpdateConsumer {
 
+    private static final DateTimeFormatter DT_FMT = DateTimeFormatter.ofPattern("dd/MM HH:mm");
+
     private final SystemSettingsService settingsService;
-    private final TelegramClient telegramClient;
-    private final GeminiService geminiService;
+    private final BotConfig botConfig;
+    private final AiService aiService;
     private final GoogleCalendarService calendarService;
     private final AppUserRepository userRepository;
     private final ObjectMapper objectMapper;
     private final String baseUrl;
 
+    private final Map<Long, EventExtractionDTO> pendingEvents = new ConcurrentHashMap<>();
+    private final Map<Long, List<Event>> recentEvents = new ConcurrentHashMap<>();
+
     public GepardBot(
             SystemSettingsService settingsService,
-            TelegramClient telegramClient,
-            GeminiService geminiService,
+            BotConfig botConfig,
+            AiService aiService,
             GoogleCalendarService calendarService,
             AppUserRepository userRepository,
             ObjectMapper objectMapper,
             @Value("${gepard.base-url}") String baseUrl) {
         this.settingsService = settingsService;
-        this.telegramClient = telegramClient;
-        this.geminiService = geminiService;
+        this.botConfig = botConfig;
+        this.aiService = aiService;
         this.calendarService = calendarService;
         this.userRepository = userRepository;
         this.objectMapper = objectMapper;
         this.baseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
+    }
+
+    private TelegramClient getTelegramClient() {
+        return botConfig.getTelegramClient();
     }
 
     @Override
@@ -70,11 +87,15 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
 
     @Override
     public void consume(Update update) {
+        if (update.hasCallbackQuery()) {
+            handleCallbackQuery(update);
+            return;
+        }
         if (!update.hasMessage()) return;
         Message message = update.getMessage();
         Long telegramId = message.getFrom().getId();
         Long chatId = message.getChatId();
-        String text = message.hasText() ? message.getText() : "";
+        String text = message.hasText() ? message.getText().trim() : "";
 
         try {
             AppUser user = userRepository.findById(telegramId).orElseGet(() ->
@@ -85,10 +106,26 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
                             .build())
             );
 
-            if (text.equals("/config")) {
-                String link = generateSettingsURL(user);
-                sendHtmlText(chatId, "⚙️ <a href=\"" + link + "\">Abrir Configurações</a>");
-                return;
+            switch (text) {
+                case "/start" -> {
+                    handleStart(chatId, user);
+                    return;
+                }
+                case "/config" -> {
+                    String link = generateSettingsURL(user);
+                    sendHtmlText(chatId, "⚙️ <a href=\"" + link + "\">Abrir Configuracoes</a>");
+                    return;
+                }
+                case "/eventos", "/events" -> {
+                    handleListEvents(chatId, user);
+                    return;
+                }
+                case "/cancelar", "/cancel" -> {
+                    pendingEvents.remove(telegramId);
+                    recentEvents.remove(telegramId);
+                    sendRawText(chatId, "✅ Operacao cancelada.");
+                    return;
+                }
             }
 
             if (!user.hasApiKey()) {
@@ -98,39 +135,154 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
 
             if (user.getGoogleRefreshToken() == null) {
                 String authLink = calendarService.buildAuthorizationUrl(telegramId);
-                sendHtmlText(chatId, "📅 <a href=\"" + authLink + "\">Conectar Agenda</a>");
+                sendHtmlText(chatId, "📅 <a href=\"" + authLink + "\">Conectar Google Agenda</a>");
                 return;
             }
 
             handleSmartScheduling(message, user);
 
         } catch (Exception e) {
-            log.error("Erro fatal", e);
-            sendRawText(chatId, "❌ Erro: " + e.getMessage());
+            log.error("Erro fatal ao processar mensagem do usuario {}", telegramId, e);
+            sendRawText(chatId, "❌ Ocorreu um erro interno. Tente novamente mais tarde.");
+        }
+    }
+
+    private void handleStart(Long chatId, AppUser user) {
+        String sb = """
+                🤖 <b>GepardBot - Seu Assistente de Agenda</b>
+                
+                Eu crio eventos no Google Agenda a partir de texto, fotos ou audio!
+                
+                """ +
+                (!user.hasApiKey() ? """
+                🔑 <b>Para comecar:</b> envie sua Gemini API Key.
+                Obtenha gratuitamente em: aistudio.google.com/app/apikey
+                
+                """ : "") +
+                (!user.hasApiKey() || user.getGoogleRefreshToken() == null ?
+                 (user.hasApiKey() ? """
+                📅 Falta conectar sua agenda Google.
+                Digite qualquer coisa que eu mostro o link.
+                
+                """ : "") : """
+                ✅ Voce ja esta configurado!
+                
+                <b>Comandos:</b>
+                /eventos - Ver proximos eventos
+                /config - Painel de configuracoes
+                /cancelar - Cancelar operacao atual
+                
+                <b>Dica:</b> Envie texto, foto ou audio descrevendo um evento!""");
+        sendHtmlText(chatId, sb);
+    }
+
+    private void handleListEvents(Long chatId, AppUser user) {
+        sendTypingAction(chatId);
+        try {
+            List<Event> events = calendarService.listUpcomingEvents(user, 10);
+
+            if (events.isEmpty()) {
+                SendMessage sm = SendMessage.builder()
+                        .chatId(chatId)
+                        .text("📅 Voce nao tem eventos proximos.")
+                        .replyMarkup(mainKeyboard())
+                        .build();
+                getTelegramClient().execute(sm);
+                return;
+            }
+
+            recentEvents.put(user.getTelegramId(), events);
+
+            StringBuilder sb = new StringBuilder();
+            sb.append("📅 <b>Proximos Eventos:</b>\n\n");
+
+            for (int i = 0; i < events.size(); i++) {
+                Event e = events.get(i);
+                String start = formatEventDateTime(e.getStart());
+                sb.append(i + 1).append(". <b>").append(HtmlUtils.htmlEscape(e.getSummary())).append("</b>\n");
+                sb.append("   ⏰ ").append(start).append("\n\n");
+            }
+
+            sb.append("Para <b>deletar</b>, responda: deletar [numero]");
+
+            SendMessage sm = SendMessage.builder()
+                    .chatId(chatId)
+                    .text(sb.toString())
+                    .parseMode("HTML")
+                    .build();
+            getTelegramClient().execute(sm);
+
+        } catch (Exception e) {
+            log.error("Erro ao listar eventos para usuario {}", user.getTelegramId(), e);
+            sendRawText(chatId, "❌ Falha ao buscar eventos. Verifique sua conexao Google.");
+        }
+    }
+
+    private void handleDeleteEvent(Long chatId, AppUser user, String text) {
+        try {
+            int idx = Integer.parseInt(text.replaceAll("[^0-9]", "")) - 1;
+            List<Event> events = recentEvents.get(user.getTelegramId());
+
+            if (events == null || idx < 0 || idx >= events.size()) {
+                sendRawText(chatId, "❌ Numero invalido. Use /eventos para ver a lista.");
+                return;
+            }
+
+            Event event = events.get(idx);
+            calendarService.deleteEvent(user, event.getId());
+            sendRawText(chatId, "✅ Evento \"" + event.getSummary() + "\" deletado!");
+
+        } catch (NumberFormatException e) {
+            sendRawText(chatId, "❌ Formato invalido. Use: deletar [numero]");
+        } catch (Exception e) {
+            log.error("Erro ao deletar evento", e);
+            sendRawText(chatId, "❌ Falha ao deletar evento.");
         }
     }
 
     private void handleApiKeyFlow(Message message, AppUser user) {
         String text = message.hasText() ? message.getText().trim() : "";
-        if (text.startsWith("AIza")) {
+        if (text.startsWith("AIza") || text.startsWith("sk-")) {
             user.setGeminiApiKey(text);
             userRepository.save(user);
             String authLink = calendarService.buildAuthorizationUrl(user.getTelegramId());
             sendHtmlText(message.getChatId(), "✅ Salvo! <a href=\"" + authLink + "\">Conectar Agenda</a>");
         } else {
-            sendHtmlText(message.getChatId(), "👋 Envie sua <b>Gemini API Key</b>.");
+            SendMessage sm = SendMessage.builder()
+                    .chatId(message.getChatId())
+                    .text("""
+                            👋 Envie sua <b>API Key</b> (Gemini ou DeepSeek).
+                            
+                            • Gemini: comeca com AIza...
+                            • DeepSeek: comeca com sk-...""")
+                    .parseMode("HTML")
+                    .build();
+            try {
+                getTelegramClient().execute(sm);
+            } catch (TelegramApiException e) {
+                log.warn("Falha ao enviar mensagem API key flow", e);
+            }
         }
     }
 
     private String generateSettingsURL(AppUser user) {
-        String token = java.util.UUID.randomUUID().toString();
+        String token = UUID.randomUUID().toString();
         user.setWebLoginToken(token);
+        user.setWebLoginTokenExpiresAt(LocalDateTime.now().plusHours(24));
         userRepository.save(user);
         return baseUrl + "/user/config?token=" + token;
     }
 
     private void handleSmartScheduling(Message message, AppUser user) {
         Long chatId = message.getChatId();
+        Long telegramId = message.getFrom().getId();
+        String text = message.hasText() ? message.getText().trim() : "";
+
+        if (text.matches("^(?i)deletar\\s+\\d+$")) {
+            handleDeleteEvent(chatId, user, text);
+            return;
+        }
+
         sendTypingAction(chatId);
 
         try {
@@ -140,51 +292,151 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
             if (message.hasPhoto()) {
                 mediaBytes = downloadPhoto(message.getPhoto());
                 mimeType = "image/jpeg";
-            }
-            else if (message.hasVoice()) {
+            } else if (message.hasVoice()) {
                 mediaBytes = downloadFile(message.getVoice().getFileId());
                 mimeType = "audio/ogg";
             }
 
             String prompt = message.getCaption() != null ? message.getCaption() : message.getText();
-            if (prompt == null) prompt = "Extraia os detalhes do evento desta mídia.";
+            if (prompt == null) prompt = "Extraia os detalhes do evento desta midia.";
 
             ZonedDateTime nowSP = ZonedDateTime.now(ZoneId.of("America/Sao_Paulo"));
-            String fullPrompt = String.format("Hoje é %s (Fuso America/Sao_Paulo). O usuário pede: %s",
+            String fullPrompt = String.format("Hoje e %s (Fuso America/Sao_Paulo). O usuario pede: %s",
                     nowSP.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME), prompt);
 
-            String jsonResponse = geminiService.generateContent(fullPrompt, mediaBytes, mimeType, user);
+            String jsonResponse = aiService.generateContent(fullPrompt, mediaBytes, mimeType, user);
 
             EventExtractionDTO eventDTO = objectMapper.readValue(jsonResponse, EventExtractionDTO.class);
-            String eventLink = calendarService.createEvent(user, eventDTO);
+
+            pendingEvents.put(telegramId, eventDTO);
 
             String safeSummary = HtmlUtils.htmlEscape(eventDTO.summary());
+            String modelUsed = getModelDisplayName(user);
 
-            StringBuilder msg = new StringBuilder();
-            msg.append("✅ <b>Agendado!</b>\n\n");
-            msg.append("📝 ").append(safeSummary).append("\n");
-            msg.append("⏰ ").append(eventDTO.startDateTime()).append("\n");
+            String confirmMsg = """
+                    📌 <b>Confirmar Evento?</b>
+                    
+                    📝 %s
+                    ⏰ Inicio: %s
+                    """.formatted(safeSummary, eventDTO.startDateTime())
+                    + (eventDTO.endDateTime() != null && !eventDTO.endDateTime().isBlank()
+                       ? "⏰ Fim: " + eventDTO.endDateTime() + "\n" : "")
+                    + (eventDTO.location() != null && !eventDTO.location().isBlank()
+                       ? "📍 " + HtmlUtils.htmlEscape(eventDTO.location()) + "\n" : "")
+                    + (eventDTO.reminders() != null && !eventDTO.reminders().isEmpty()
+                       ? "🔔 Lembretes: " + eventDTO.reminders() + " min\n" : "")
+                    + "\n🤖 Modelo: " + modelUsed;
 
-            if (eventDTO.reminders() != null && !eventDTO.reminders().isEmpty()) {
-                msg.append("🔔 Lembretes: ").append(eventDTO.reminders()).append(" min antes\n");
+            InlineKeyboardMarkup keyboard = InlineKeyboardMarkup.builder()
+                    .keyboardRow(new InlineKeyboardRow(
+                            InlineKeyboardButton.builder()
+                                    .text("Sim, criar evento")
+                                    .callbackData("confirm_event")
+                                    .build(),
+                            InlineKeyboardButton.builder()
+                                    .text("Nao, cancelar")
+                                    .callbackData("cancel_event")
+                                    .build()
+                    ))
+                    .build();
+
+            SendMessage sm = SendMessage.builder()
+                    .chatId(chatId)
+                    .text(confirmMsg)
+                    .parseMode("HTML")
+                    .replyMarkup(keyboard)
+                    .build();
+            getTelegramClient().execute(sm);
+
+        } catch (IllegalStateException | IllegalArgumentException e) {
+            log.warn("Dados invalidos do usuario {}: {}", user.getTelegramId(), e.getMessage());
+            sendRawText(chatId, "❌ " + e.getMessage());
+        } catch (Exception e) {
+            log.error("Erro IA/Agenda para usuario {}", user.getTelegramId(), e);
+            sendRawText(chatId, "❌ Falha ao processar. Verifique sua configuracao e tente novamente.");
+        }
+    }
+
+    private void handleCallbackQuery(Update update) {
+        var callbackQuery = update.getCallbackQuery();
+        String data = callbackQuery.getData();
+        Long chatId = callbackQuery.getMessage().getChatId();
+        Long telegramId = callbackQuery.getFrom().getId();
+
+        try {
+            AppUser user = userRepository.findById(telegramId)
+                    .orElseThrow(() -> new RuntimeException("Usuario nao encontrado"));
+
+            if ("confirm_event".equals(data)) {
+                EventExtractionDTO eventDTO = pendingEvents.remove(telegramId);
+                if (eventDTO == null) {
+                    sendRawText(chatId, "⚠️ Evento nao encontrado. Operacao expirada. Tente novamente.");
+                    return;
+                }
+                String eventLink = calendarService.createEvent(user, eventDTO);
+
+                String safeSummary = HtmlUtils.htmlEscape(eventDTO.summary());
+                String msg = "✅ <b>Agendado!</b>\n\n"
+                        + "📝 " + safeSummary + "\n"
+                        + "⏰ " + eventDTO.startDateTime() + "\n"
+                        + "\n<a href=\"" + eventLink + "\">Ver no Google Agenda</a>";
+
+                sendHtmlText(chatId, msg);
+
+            } else if ("cancel_event".equals(data)) {
+                pendingEvents.remove(telegramId);
+                sendRawText(chatId, "❌ Evento cancelado. Nada foi criado.");
             }
 
-            msg.append("\n<a href=\"").append(eventLink).append("\">Ver no Google Agenda</a>");
-
-            sendHtmlText(chatId, msg.toString());
-
         } catch (Exception e) {
-            log.error("Erro IA/Agenda", e);
-            sendRawText(chatId, "❌ Falha: " + e.getMessage());
+            log.error("Erro ao processar callback do usuario {}", telegramId, e);
+            pendingEvents.remove(telegramId);
+            sendRawText(chatId, "❌ Falha ao criar o evento. Tente novamente.");
         }
+    }
+
+    private String getModelDisplayName(AppUser user) {
+        String model = user.getPreferredModel();
+        if (model == null || model.isBlank()) return "Padrao";
+        if (model.contains("deepseek")) return "DeepSeek";
+        if (model.contains("pro")) return "Gemini Pro";
+        if (model.contains("flash-lite")) return "Gemini Lite";
+        if (model.contains("flash")) return "Gemini Flash";
+        return model;
+    }
+
+    private String formatEventDateTime(EventDateTime edt) {
+        try {
+            DateTime dt = edt.getDateTime() != null ? edt.getDateTime() : edt.getDate();
+            if (dt == null) return "?";
+            ZonedDateTime zdt = Instant.ofEpochMilli(dt.getValue())
+                    .atZone(ZoneId.of("America/Sao_Paulo"));
+            return zdt.format(DT_FMT);
+        } catch (Exception e) {
+            return edt.toString();
+        }
+    }
+
+    private ReplyKeyboardMarkup mainKeyboard() {
+        KeyboardRow row1 = new KeyboardRow();
+        row1.add("/start");
+        row1.add("/eventos");
+        row1.add("/config");
+
+        return ReplyKeyboardMarkup.builder()
+                .keyboardRow(row1)
+                .resizeKeyboard(true)
+                .build();
     }
 
     private void sendTypingAction(Long chatId) {
         try {
-            telegramClient.execute(SendChatAction.builder()
+            getTelegramClient().execute(SendChatAction.builder()
                     .chatId(chatId)
                     .action(ActionType.TYPING.toString()).build());
-        } catch (TelegramApiException _) {}
+        } catch (TelegramApiException e) {
+            log.debug("Falha ao enviar acao de digitacao para chat {}", chatId, e);
+        }
     }
 
     private byte[] downloadPhoto(List<PhotoSize> photos) throws TelegramApiException, IOException {
@@ -196,8 +448,8 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
 
     private byte[] downloadFile(String fileId) throws TelegramApiException, IOException {
         GetFile getFileMethod = new GetFile(fileId);
-        File file = telegramClient.execute(getFileMethod);
-        try (InputStream is = telegramClient.downloadFileAsStream(file)) {
+        File file = getTelegramClient().execute(getFileMethod);
+        try (InputStream is = getTelegramClient().downloadFileAsStream(file)) {
             return is.readAllBytes();
         }
     }
@@ -208,16 +460,26 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
                 .text(text)
                 .parseMode("HTML")
                 .disableWebPagePreview(true)
+                .replyMarkup(mainKeyboard())
                 .build();
         try {
-            telegramClient.execute(sm);
+            getTelegramClient().execute(sm);
         } catch (TelegramApiException e) {
+            log.warn("Falha ao enviar HTML para chat {}. Reenviando como texto puro.", chatId, e);
             sendRawText(chatId, text);
         }
     }
 
     private void sendRawText(Long chatId, String text) {
-        SendMessage sm = SendMessage.builder().chatId(chatId).text(text).build();
-        try { telegramClient.execute(sm); } catch (TelegramApiException e) { log.error("F", e); }
+        SendMessage sm = SendMessage.builder()
+                .chatId(chatId)
+                .text(text)
+                .replyMarkup(mainKeyboard())
+                .build();
+        try {
+            getTelegramClient().execute(sm);
+        } catch (TelegramApiException e) {
+            log.error("Falha ao enviar mensagem para chat {}", chatId, e);
+        }
     }
 }

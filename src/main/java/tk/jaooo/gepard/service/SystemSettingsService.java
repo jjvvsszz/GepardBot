@@ -20,10 +20,10 @@ public class SystemSettingsService {
     private final GlobalConfigRepository repository;
     private final PasswordEncoder passwordEncoder;
 
-    @Value("${gepard.telegram.bot-token}") private String envBotToken;
-    @Value("${gepard.telegram.bot-username}") private String envBotUsername;
-    @Value("${spring.security.oauth2.client.registration.google.client-id}") private String envClientId;
-    @Value("${spring.security.oauth2.client.registration.google.client-secret}") private String envClientSecret;
+    @Value("${gepard.telegram.bot-token:}") private String envBotToken;
+    @Value("${gepard.telegram.bot-username:}") private String envBotUsername;
+    @Value("${spring.security.oauth2.client.registration.google.client-id:}") private String envClientId;
+    @Value("${spring.security.oauth2.client.registration.google.client-secret:}") private String envClientSecret;
 
     @PostConstruct
     public void init() {
@@ -42,7 +42,7 @@ public class SystemSettingsService {
 
     private void createInitialConfig() {
         String tempPassword = UUID.randomUUID().toString().substring(0, 8);
-        printAdminCredentials("admin", tempPassword);
+        printAdminCredentials(tempPassword);
 
         GlobalConfig config = GlobalConfig.builder()
                 .id(1L)
@@ -53,14 +53,14 @@ public class SystemSettingsService {
                 .telegramBotUsername(envBotUsername)
                 .googleClientId(envClientId)
                 .googleClientSecret(envClientSecret)
-                .geminiModel("models/gemini-3-flash-preview")
+                .geminiModel(AiService.getDefaultModel())
                 .build();
         repository.save(config);
     }
 
     private void resetAdminCredentials(GlobalConfig config) {
         String tempPassword = UUID.randomUUID().toString().substring(0, 8);
-        printAdminCredentials("admin", tempPassword);
+        printAdminCredentials(tempPassword);
 
         config.setAdminUsername("admin");
         config.setAdminPasswordHash(passwordEncoder.encode(tempPassword));
@@ -68,10 +68,10 @@ public class SystemSettingsService {
         repository.save(config);
     }
 
-    private void printAdminCredentials(String user, String pass) {
+    private void printAdminCredentials(String pass) {
         log.warn("==================================================");
-        log.warn("🔐 CREDENCIAIS DE ADMIN TEMPORÁRIAS");
-        log.warn("👤 Usuário: {}", user);
+        log.warn("🔐 CREDENCIAIS DE ADMIN TEMPORARIAS");
+        log.warn("👤 Usuario: admin");
         log.warn("🔑 Senha:   {}", pass);
         log.warn("==================================================");
     }

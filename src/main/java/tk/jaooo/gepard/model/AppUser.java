@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 import tk.jaooo.gepard.util.StringCryptoConverter;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 
 @Entity
@@ -28,6 +29,9 @@ public class AppUser {
     @Column(length = 50)
     private String preferredModel;
 
+    @Column(length = 50)
+    private String pendingModel;
+
     @Convert(converter = StringCryptoConverter.class)
     @Column(length = 4096)
     private String googleRefreshToken;
@@ -36,7 +40,11 @@ public class AppUser {
     @Column(length = 4096)
     private String googleAccessToken;
 
+    private Instant googleTokenIssuedAt;
+
     private String webLoginToken;
+
+    private LocalDateTime webLoginTokenExpiresAt;
 
     private LocalDateTime createdAt;
 
@@ -59,5 +67,10 @@ public class AppUser {
 
     public boolean isGoogleConnected() {
         return googleRefreshToken != null;
+    }
+
+    public boolean isWebTokenExpired() {
+        return webLoginToken == null || webLoginTokenExpiresAt == null
+                || !LocalDateTime.now().isBefore(webLoginTokenExpiresAt);
     }
 }

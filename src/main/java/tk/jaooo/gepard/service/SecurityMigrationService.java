@@ -26,17 +26,17 @@ public class SecurityMigrationService implements ApplicationRunner {
         List<AppUser> vulnerableUsers = userRepository.findUsersWithUnencryptedData();
 
         if (vulnerableUsers.isEmpty()) {
-            log.info("🛡️ Verificação de segurança: Todos os dados já estão criptografados no banco.");
+            log.info("Verificacao de seguranca: Todos os dados ja estao criptografados no banco.");
             return;
         }
 
-        log.info("Encontrados {} usuários com dados expostos. Iniciando criptografia...", vulnerableUsers.size());
+        log.info("Encontrados {} usuarios com dados expostos. Iniciando criptografia...", vulnerableUsers.size());
 
         for (AppUser user : vulnerableUsers) {
             user.setUpdatedAt(LocalDateTime.now());
-            userRepository.saveAndFlush(user);
         }
+        userRepository.saveAll(vulnerableUsers);
 
-        log.info("MIGRAÇÃO CRÍTICA CONCLUÍDA: {} usuários protegidos.", vulnerableUsers.size());
+        log.info("MIGRACAO CRITICA CONCLUIDA: {} usuarios protegidos.", vulnerableUsers.size());
     }
 }

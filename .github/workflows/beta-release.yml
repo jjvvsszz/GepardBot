@@ -102,8 +102,8 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Build with Gradle
-        run: ./gradlew clean build -x test
+      - name: Build and Test with Gradle
+        run: ./gradlew clean build
 
       - name: Remove Plain JAR
         run: rm build/libs/*-plain.jar || true

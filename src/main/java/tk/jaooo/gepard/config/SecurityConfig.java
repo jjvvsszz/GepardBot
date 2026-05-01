@@ -31,6 +31,12 @@ public class SecurityConfig {
                 .formLogin(form -> form
                         .defaultSuccessUrl("/admin", true)
                 )
+                .logout(logout -> logout
+                        .logoutUrl("/admin/logout")
+                        .logoutSuccessUrl("/admin")
+                        .invalidateHttpSession(true)
+                        .deleteCookies("JSESSIONID")
+                )
                 .csrf(csrf -> csrf.ignoringRequestMatchers("/h2-console/**", "/admin/**", "/user/config/**"))
                 .headers(headers -> headers.frameOptions(HeadersConfigurer.FrameOptionsConfig::disable));
 

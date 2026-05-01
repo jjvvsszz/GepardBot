@@ -10,6 +10,7 @@ import tk.jaooo.gepard.model.AppUser;
 import tk.jaooo.gepard.repository.AppUserRepository;
 import tk.jaooo.gepard.service.GoogleCalendarService;
 
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Slf4j
@@ -40,10 +41,11 @@ public class AuthController {
                     .orElseThrow(() -> new RuntimeException("Usuário não encontrado pós-auth"));
 
             // 3. CORREÇÃO: Garante que existe um token de login web
-            if (user.getWebLoginToken() == null || user.getWebLoginToken().isBlank()) {
+            if (user.getWebLoginToken() == null || user.getWebLoginToken().isBlank() || user.isWebTokenExpired()) {
                 String newToken = UUID.randomUUID().toString();
                 user.setWebLoginToken(newToken);
-                userRepository.save(user); // Salva o novo token
+                user.setWebLoginTokenExpiresAt(LocalDateTime.now().plusHours(24));
+                userRepository.save(user);
             }
 
             // 4. Redireciona para o painel do usuário
@@ -52,7 +54,7 @@ public class AuthController {
         } catch (Exception e) {
             log.error("Erro no callback OAuth", e);
             // Em caso de erro, redireciona para uma página de erro ou home
-            return new RedirectView("/error?msg=" + e.getMessage());
+            return new RedirectView("/error?msg=" + java.net.URLEncoder.encode(e.getMessage(), java.nio.charset.StandardCharsets.UTF_8));
         }
     }
 }

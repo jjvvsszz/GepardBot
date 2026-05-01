@@ -21,7 +21,7 @@ public class GlobalConfig {
     // --- CREDENCIAIS DO ADMIN ---
     private String adminUsername;
     private String adminPasswordHash;
-    private boolean adminSetupRequired;
+    private Boolean adminSetupRequired;
 
     // --- TELEGRAM ---
     private String telegramBotToken;
