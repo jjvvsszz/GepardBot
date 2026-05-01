@@ -7,7 +7,6 @@ import com.google.api.services.calendar.model.EventDateTime;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
-import org.springframework.web.util.HtmlUtils;
 import org.telegram.telegrambots.longpolling.interfaces.LongPollingUpdateConsumer;
 import org.telegram.telegrambots.longpolling.starter.SpringLongPollingBot;
 import org.telegram.telegrambots.longpolling.util.LongPollingSingleThreadUpdateConsumer;
@@ -113,7 +112,7 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
                 }
                 case "/config" -> {
                     String link = generateSettingsURL(user);
-                    sendHtmlText(chatId, "⚙️ <a href=\"" + link + "\">Abrir Configuracoes</a>");
+                    sendHtmlText(chatId, "⚙️ <a href=\"" + escapeHtml(link) + "\">Abrir Configuracoes</a>");
                     return;
                 }
                 case "/eventos", "/events" -> {
@@ -135,7 +134,7 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
 
             if (user.getGoogleRefreshToken() == null) {
                 String authLink = calendarService.buildAuthorizationUrl(telegramId);
-                sendHtmlText(chatId, "📅 <a href=\"" + authLink + "\">Conectar Google Agenda</a>");
+                sendHtmlText(chatId, "📅 <a href=\"" + escapeHtml(authLink) + "\">Conectar Google Agenda</a>");
                 return;
             }
 
@@ -194,7 +193,7 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
             for (int i = 0; i < events.size(); i++) {
                 Event e = events.get(i);
                 String start = formatEventDateTime(e.getStart());
-                sb.append(i + 1).append(". <b>").append(HtmlUtils.htmlEscape(e.getSummary())).append("</b>\n");
+                sb.append(i + 1).append(". <b>").append(escapeHtml(e.getSummary())).append("</b>\n");
                 sb.append("   ⏰ ").append(start).append("\n\n");
             }
 
@@ -242,7 +241,7 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
             user.setGeminiApiKey(text);
             userRepository.save(user);
             String authLink = calendarService.buildAuthorizationUrl(user.getTelegramId());
-            sendHtmlText(message.getChatId(), "✅ Gemini Key salva! <a href=\"" + authLink + "\">Conectar Agenda</a>");
+            sendHtmlText(message.getChatId(), "✅ Gemini Key salva! <a href=\"" + escapeHtml(authLink) + "\">Conectar Agenda</a>");
         } else if (text.startsWith("sk-")) {
             if (!user.hasGeminiKey()) {
                 sendRawText(message.getChatId(), "⚠️ Envie primeiro sua Gemini API Key (comeca com AIza...).\nA Gemini e obrigatoria para processar fotos e audio.");
@@ -324,7 +323,7 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
 
             pendingEvents.put(telegramId, eventDTO);
 
-            String safeSummary = HtmlUtils.htmlEscape(eventDTO.summary());
+            String safeSummary = escapeHtml(eventDTO.summary());
             String modelUsed = getModelDisplayName(user, mediaBytes != null);
 
             String confirmMsg = """
@@ -336,7 +335,7 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
                     + (eventDTO.endDateTime() != null && !eventDTO.endDateTime().isBlank()
                        ? "⏰ Fim: " + eventDTO.endDateTime() + "\n" : "")
                     + (eventDTO.location() != null && !eventDTO.location().isBlank()
-                       ? "📍 " + HtmlUtils.htmlEscape(eventDTO.location()) + "\n" : "")
+                       ? "📍 " + escapeHtml(eventDTO.location()) + "\n" : "")
                     + (eventDTO.reminders() != null && !eventDTO.reminders().isEmpty()
                        ? "🔔 Lembretes: " + eventDTO.reminders() + " min\n" : "")
                     + "\n🤖 Modelo: " + modelUsed;
@@ -389,11 +388,11 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
                 }
                 String eventLink = calendarService.createEvent(user, eventDTO);
 
-                String safeSummary = HtmlUtils.htmlEscape(eventDTO.summary());
+                String safeSummary = escapeHtml(eventDTO.summary());
                 String msg = "✅ <b>Agendado!</b>\n\n"
                         + "📝 " + safeSummary + "\n"
                         + "⏰ " + eventDTO.startDateTime() + "\n"
-                        + "\n<a href=\"" + eventLink + "\">Ver no Google Agenda</a>";
+                        + "\n<a href=\"" + escapeHtml(eventLink) + "\">Ver no Google Agenda</a>";
 
                 sendHtmlText(chatId, msg);
 
@@ -483,8 +482,15 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
             getTelegramClient().execute(sm);
         } catch (TelegramApiException e) {
             log.warn("Falha ao enviar HTML para chat {}. Reenviando como texto puro.", chatId, e);
-            sendRawText(chatId, text);
+            sendRawText(chatId, text.replaceAll("<[^>]+>", ""));
         }
+    }
+
+    private String escapeHtml(String s) {
+        if (s == null) return "";
+        return s.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;");
     }
 
     private void sendRawText(Long chatId, String text) {
