@@ -41,6 +41,7 @@ public class DeepSeekService {
                 Voce e um assistente de agendamento.
                 Fuso: America/Sao_Paulo (-03:00).
                 Extraia detalhes do evento do texto do usuario.
+                Retorne a resposta em formato JSON.
                 
                 REGRAS DE LEMBRETES (Reminders):
                 1. O campo 'reminders' aceita APENAS numeros inteiros (minutos).
