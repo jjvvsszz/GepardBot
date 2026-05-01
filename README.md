@@ -109,10 +109,20 @@ java -jar app.jar --spring.profiles.active=prod \
 
 ### 2. Configuração do Usuário
 1. No Telegram, digite `/start` para ver instruções.
-2. Digite `/config` para receber link do painel web.
-3. Insira sua API Key (Gemini ou DeepSeek).
-4. Conecte sua conta Google.
-5. Escolha seu modelo de IA preferido.
+2. Envie sua **Gemini API Key** (obrigatória, começa com `AIza...`).
+3. Envie sua **DeepSeek API Key** (opcional, começa com `sk-...`).
+4. Digite `/config` para receber link do painel web.
+5. No painel: insira as API Keys, escolha modelo para texto e modelo para arquivos.
+6. Conecte sua conta Google.
+
+### 🔐 Console de Comandos
+
+O servidor aceita comandos via terminal (stdin):
+
+```bash
+adminsenha <nova_senha>   # Altera a senha do painel admin
+help                      # Lista comandos disponiveis
+```
 
 ### 3. Agendando Eventos
 Envie mensagens para o bot:

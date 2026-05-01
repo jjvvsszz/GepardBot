@@ -99,4 +99,12 @@ public class SystemSettingsService {
         config.setAdminSetupRequired(false);
         repository.save(config);
     }
+
+    @Transactional
+    public void updatePassword(String newPassword) {
+        GlobalConfig config = getConfig();
+        config.setAdminPasswordHash(passwordEncoder.encode(newPassword));
+        repository.save(config);
+        log.info("🔐 Senha do admin alterada via console.");
+    }
 }

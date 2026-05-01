@@ -26,11 +26,15 @@ public class AppUser {
     @Column
     private String geminiApiKey;
 
-    @Column(length = 50)
-    private String preferredModel;
+    @Convert(converter = StringCryptoConverter.class)
+    @Column(length = 4096)
+    private String deepSeekApiKey;
+
+    @Column(length = 50, name = "preferred_model")
+    private String preferredTextModel;
 
     @Column(length = 50)
-    private String pendingModel;
+    private String preferredFileModel;
 
     @Convert(converter = StringCryptoConverter.class)
     @Column(length = 4096)
@@ -61,8 +65,12 @@ public class AppUser {
         this.updatedAt = LocalDateTime.now();
     }
 
-    public boolean hasApiKey() {
+    public boolean hasGeminiKey() {
         return geminiApiKey != null && !geminiApiKey.isBlank();
+    }
+
+    public boolean hasDeepSeekKey() {
+        return deepSeekApiKey != null && !deepSeekApiKey.isBlank();
     }
 
     public boolean isGoogleConnected() {

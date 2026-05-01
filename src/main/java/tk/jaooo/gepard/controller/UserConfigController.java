@@ -28,7 +28,8 @@ public class UserConfigController {
         }
 
         model.addAttribute("user", user);
-        model.addAttribute("availableModels", AiService.getAllModels());
+        model.addAttribute("allModels", AiService.getAllModels());
+        model.addAttribute("fileModels", AiService.getFileModels());
 
         String googleAuthLink = calendarService.buildAuthorizationUrl(user.getTelegramId());
         model.addAttribute("googleAuthLink", googleAuthLink);
@@ -40,23 +41,34 @@ public class UserConfigController {
     public String saveUserConfig(
             @RequestParam("token") String token,
             @RequestParam("geminiApiKey") String geminiApiKey,
-            @RequestParam(value = "preferredModel", required = false) String preferredModel,
+            @RequestParam(value = "deepSeekApiKey", required = false) String deepSeekApiKey,
+            @RequestParam(value = "preferredTextModel", required = false) String preferredTextModel,
+            @RequestParam(value = "preferredFileModel", required = false) String preferredFileModel,
             Model model) {
 
         AppUser user = userRepository.findByWebLoginToken(token)
                 .orElseThrow(() -> new RuntimeException("Usuario nao encontrado."));
 
-        user.setGeminiApiKey(geminiApiKey.trim());
+        user.setGeminiApiKey(geminiApiKey != null ? geminiApiKey.trim() : null);
 
-        if (preferredModel != null && AiService.getAllModels().contains(preferredModel)) {
-            user.setPreferredModel(preferredModel);
+        if (deepSeekApiKey != null && !deepSeekApiKey.isBlank()) {
+            user.setDeepSeekApiKey(deepSeekApiKey.trim());
+        }
+
+        if (preferredTextModel != null && AiService.getAllModels().contains(preferredTextModel)) {
+            user.setPreferredTextModel(preferredTextModel);
+        }
+
+        if (preferredFileModel != null && AiService.getFileModels().contains(preferredFileModel)) {
+            user.setPreferredFileModel(preferredFileModel);
         }
 
         userRepository.save(user);
 
         model.addAttribute("message", "✅ Configuracoes salvas com sucesso!");
         model.addAttribute("user", user);
-        model.addAttribute("availableModels", AiService.getAllModels());
+        model.addAttribute("allModels", AiService.getAllModels());
+        model.addAttribute("fileModels", AiService.getFileModels());
         model.addAttribute("googleAuthLink", calendarService.buildAuthorizationUrl(user.getTelegramId()));
 
         return "user_config";

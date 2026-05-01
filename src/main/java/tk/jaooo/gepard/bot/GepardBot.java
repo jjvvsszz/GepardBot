@@ -128,7 +128,7 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
                 }
             }
 
-            if (!user.hasApiKey()) {
+            if (!user.hasGeminiKey()) {
                 handleApiKeyFlow(message, user);
                 return;
             }
@@ -148,32 +148,27 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
     }
 
     private void handleStart(Long chatId, AppUser user) {
-        String sb = """
-                🤖 <b>GepardBot - Seu Assistente de Agenda</b>
-                
-                Eu crio eventos no Google Agenda a partir de texto, fotos ou audio!
-                
-                """ +
-                (!user.hasApiKey() ? """
-                🔑 <b>Para comecar:</b> envie sua Gemini API Key.
-                Obtenha gratuitamente em: aistudio.google.com/app/apikey
-                
-                """ : "") +
-                (!user.hasApiKey() || user.getGoogleRefreshToken() == null ?
-                 (user.hasApiKey() ? """
-                📅 Falta conectar sua agenda Google.
-                Digite qualquer coisa que eu mostro o link.
-                
-                """ : "") : """
-                ✅ Voce ja esta configurado!
-                
-                <b>Comandos:</b>
-                /eventos - Ver proximos eventos
-                /config - Painel de configuracoes
-                /cancelar - Cancelar operacao atual
-                
-                <b>Dica:</b> Envie texto, foto ou audio descrevendo um evento!""");
-        sendHtmlText(chatId, sb);
+        StringBuilder sb = new StringBuilder();
+        sb.append("🤖 <b>GepardBot - Seu Assistente de Agenda</b>\n\n");
+        sb.append("Eu crio eventos no Google Agenda a partir de texto, fotos ou audio!\n\n");
+
+        if (!user.hasGeminiKey()) {
+            sb.append("🔑 <b>Para comecar:</b> envie sua <b>Gemini API Key</b> (obrigatoria).\n");
+            sb.append("Obtenha gratuitamente em: aistudio.google.com/app/apikey\n");
+            sb.append("(sua chave comeca com AIza...)\n\n");
+        } else if (user.getGoogleRefreshToken() == null) {
+            sb.append("📅 Falta conectar sua agenda Google.\n");
+            sb.append("Digite qualquer coisa que eu mostro o link.\n\n");
+        } else {
+            sb.append("✅ Voce ja esta configurado!\n\n");
+            sb.append("<b>Comandos:</b>\n");
+            sb.append("/eventos - Ver proximos eventos\n");
+            sb.append("/config - Painel de configuracoes\n");
+            sb.append("/cancelar - Cancelar operacao atual\n\n");
+            sb.append("<b>Dica:</b> Envie texto, foto ou audio descrevendo um evento!\n");
+            sb.append("<b>DeepSeek:</b> Envie uma chave sk-... e configure no painel /config\n");
+        }
+        sendHtmlText(chatId, sb.toString());
     }
 
     private void handleListEvents(Long chatId, AppUser user) {
@@ -242,19 +237,30 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
 
     private void handleApiKeyFlow(Message message, AppUser user) {
         String text = message.hasText() ? message.getText().trim() : "";
-        if (text.startsWith("AIza") || text.startsWith("sk-")) {
+
+        if (text.startsWith("AIza")) {
             user.setGeminiApiKey(text);
             userRepository.save(user);
             String authLink = calendarService.buildAuthorizationUrl(user.getTelegramId());
-            sendHtmlText(message.getChatId(), "✅ Salvo! <a href=\"" + authLink + "\">Conectar Agenda</a>");
+            sendHtmlText(message.getChatId(), "✅ Gemini Key salva! <a href=\"" + authLink + "\">Conectar Agenda</a>");
+        } else if (text.startsWith("sk-")) {
+            if (!user.hasGeminiKey()) {
+                sendRawText(message.getChatId(), "⚠️ Envie primeiro sua Gemini API Key (comeca com AIza...).\nA Gemini e obrigatoria para processar fotos e audio.");
+                return;
+            }
+            user.setDeepSeekApiKey(text);
+            userRepository.save(user);
+            sendHtmlText(message.getChatId(), "✅ DeepSeek Key salva! Agora voce pode usar modelos DeepSeek para texto.\nUse /config para escolher o modelo.");
         } else {
             SendMessage sm = SendMessage.builder()
                     .chatId(message.getChatId())
                     .text("""
-                            👋 Envie sua <b>API Key</b> (Gemini ou DeepSeek).
-                            
-                            • Gemini: comeca com AIza...
-                            • DeepSeek: comeca com sk-...""")
+                            👋 Envie sua <b>API Key</b>:
+
+                            🔑 <b>Gemini</b> (obrigatoria) — comeca com AIza...
+                            🔑 <b>DeepSeek</b> (opcional) — comeca com sk-...
+
+                            Configure os modelos no painel /config""")
                     .parseMode("HTML")
                     .build();
             try {
@@ -311,11 +317,11 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
             pendingEvents.put(telegramId, eventDTO);
 
             String safeSummary = HtmlUtils.htmlEscape(eventDTO.summary());
-            String modelUsed = getModelDisplayName(user);
+            String modelUsed = getModelDisplayName(user, mediaBytes != null);
 
             String confirmMsg = """
                     📌 <b>Confirmar Evento?</b>
-                    
+
                     📝 %s
                     ⏰ Inicio: %s
                     """.formatted(safeSummary, eventDTO.startDateTime())
@@ -395,8 +401,11 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
         }
     }
 
-    private String getModelDisplayName(AppUser user) {
-        String model = user.getPreferredModel();
+    private String getModelDisplayName(AppUser user, boolean hasMedia) {
+        String model = hasMedia ? user.getPreferredFileModel() : user.getPreferredTextModel();
+        if (model == null || model.isBlank()) {
+            model = settingsService.getConfig().getGeminiModel();
+        }
         if (model == null || model.isBlank()) return "Padrao";
         if (model.contains("deepseek")) return "DeepSeek";
         if (model.contains("pro")) return "Gemini Pro";

@@ -14,20 +14,11 @@ import java.util.*;
 @Service
 public class GeminiService {
 
-    private final SystemSettingsService settingsService;
+    public String generateContent(String promptText, byte[] mediaBytes, String mediaMimeType,
+                                  AppUser user, String modelName, String apiKey) {
+        log.info("Gemini gerando para User {} com modelo: {}", user.getTelegramId(), modelName);
 
-    public GeminiService(SystemSettingsService settingsService) {
-        this.settingsService = settingsService;
-    }
-
-    public String generateContent(String promptText, byte[] mediaBytes, String mediaMimeType, AppUser user) {
-        String globalModel = settingsService.getConfig().getGeminiModel();
-        String userModel = user.getPreferredModel();
-        String modelName = (userModel != null && !userModel.isBlank()) ? userModel : globalModel;
-
-        log.info("Gerando conteúdo para User {} usando modelo: {}", user.getTelegramId(), modelName);
-
-        try (Client client = Client.builder().apiKey(user.getGeminiApiKey()).build()) {
+        try (Client client = Client.builder().apiKey(apiKey).build()) {
 
             List<Part> parts = new ArrayList<>();
 
@@ -44,15 +35,15 @@ public class GeminiService {
             Schema eventSchema = Schema.builder()
                     .type(Type.Known.OBJECT)
                     .properties(ImmutableMap.of(
-                            "summary", Schema.builder().type(Type.Known.STRING).description("Título curto").build(),
+                            "summary", Schema.builder().type(Type.Known.STRING).description("Titulo curto").build(),
                             "location", Schema.builder().type(Type.Known.STRING).description("Local").build(),
-                            "description", Schema.builder().type(Type.Known.STRING).description("Descrição").build(),
-                            "startDateTime", Schema.builder().type(Type.Known.STRING).description("Início ISO8601 (-03:00)").build(),
+                            "description", Schema.builder().type(Type.Known.STRING).description("Descricao").build(),
+                            "startDateTime", Schema.builder().type(Type.Known.STRING).description("Inicio ISO8601 (-03:00)").build(),
                             "endDateTime", Schema.builder().type(Type.Known.STRING).description("Fim ISO8601 (-03:00)").build(),
                             "reminders", Schema.builder()
                                     .type(Type.Known.ARRAY)
                                     .items(Schema.builder().type(Type.Known.INTEGER).build())
-                                    .description("Se não pedir, avalie de acordo com o evento e defina lembretes da forma que achar necessário (30 é o padrão).").build()
+                                    .description("Se nao pedir, avalie de acordo com o evento e defina lembretes da forma que achar necessario (30 e o padrao).").build()
                     ))
                     .required(Arrays.asList("summary", "startDateTime"))
                     .build();
@@ -69,13 +60,13 @@ public class GeminiService {
                             Content.builder()
                                     .parts(ImmutableList.of(
                                             Part.fromText("""
-                Você é um assistente de agendamento.
+                Voce e um assistente de agendamento.
                 Fuso: America/Sao_Paulo (-03:00).
-                Áudios e Imagens devem ser analisados para extrair detalhes do evento.
+                Audios e Imagens devem ser analisados para extrair detalhes do evento.
                 
                 REGRAS DE LEMBRETES (Reminders):
-                1. O campo 'reminders' aceita APENAS números inteiros (minutos).
-                2. Se o usuário pedir '2 dias antes', CALCULE: 2 * 24 * 60 = 2880. Retorne [2880].
+                1. O campo 'reminders' aceita APENAS numeros inteiros (minutos).
+                2. Se o usuario pedir '2 dias antes', CALCULE: 2 * 24 * 60 = 2880. Retorne [2880].
                 3. Se pedir '1 semana antes', CALCULE: 7 * 24 * 60 = 10080.
                 """)
                                     ))

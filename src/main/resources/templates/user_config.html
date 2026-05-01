@@ -28,28 +28,55 @@
                 <input type="hidden" name="token" th:value="${user.webLoginToken}">
 
                 <div class="mb-4">
-                    <label for="geminiApiKey" class="form-label fw-bold">API Key</label>
+                    <label for="geminiApiKey" class="form-label fw-bold">🔑 Gemini API Key <span class="text-danger">*</span></label>
                     <input type="password" id="geminiApiKey" name="geminiApiKey" class="form-control"
-                           placeholder="AIza... ou sk-..."
+                           placeholder="AIza..."
+                           required
                            th:value="${user.geminiApiKey}">
                     <div class="form-text">
-                        Gemini: <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a> |
-                        DeepSeek: <a href="https://platform.deepseek.com/api_keys" target="_blank">DeepSeek Platform</a>
+                        Obrigatoria. Obtenha em <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a>.
                     </div>
                 </div>
 
                 <div class="mb-4">
-                    <label for="preferredModel" class="form-label fw-bold">Modelo de IA Preferido</label>
-                    <select id="preferredModel" name="preferredModel" class="form-select">
-                        <option value="" th:selected="${user.preferredModel == null}">Usar Padrao do Sistema</option>
-                        <option th:each="m : ${availableModels}"
+                    <label for="deepSeekApiKey" class="form-label fw-bold">🔑 DeepSeek API Key</label>
+                    <input type="password" id="deepSeekApiKey" name="deepSeekApiKey" class="form-control"
+                           placeholder="sk-..."
+                           th:value="${user.deepSeekApiKey}">
+                    <div class="form-text">
+                        Opcional. Obtenha em <a href="https://platform.deepseek.com/api_keys" target="_blank">DeepSeek Platform</a>.
+                    </div>
+                </div>
+
+                <hr>
+
+                <div class="mb-4">
+                    <label for="preferredTextModel" class="form-label fw-bold">🧠 Modelo para Texto</label>
+                    <select id="preferredTextModel" name="preferredTextModel" class="form-select">
+                        <option value="" th:selected="${user.preferredTextModel == null}">Usar Padrao do Sistema</option>
+                        <option th:each="m : ${allModels}"
                                 th:value="${m}"
                                 th:text="${m}"
-                                th:selected="${m == user.preferredModel}">
+                                th:selected="${m == user.preferredTextModel}">
                         </option>
                     </select>
                     <div class="form-text mt-2">
-                        DeepSeek: apenas texto. Gemini: texto + foto + audio.
+                        Qualquer modelo (Gemini ou DeepSeek). DeepSeek requer API Key acima.
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <label for="preferredFileModel" class="form-label fw-bold">📎 Modelo para Arquivos</label>
+                    <select id="preferredFileModel" name="preferredFileModel" class="form-select">
+                        <option value="" th:selected="${user.preferredFileModel == null}">Usar Padrao do Sistema</option>
+                        <option th:each="m : ${fileModels}"
+                                th:value="${m}"
+                                th:text="${m}"
+                                th:selected="${m == user.preferredFileModel}">
+                        </option>
+                    </select>
+                    <div class="form-text mt-2">
+                        Apenas modelos Gemini (fotos e audio nao sao suportados pelo DeepSeek).
                     </div>
                 </div>
 
@@ -59,7 +86,7 @@
             <hr class="my-4">
 
             <div class="mb-3">
-                <label class="form-label fw-bold">Google Agenda</label>
+                <label class="form-label fw-bold">📅 Google Agenda</label>
 
                 <div th:if="${user.isGoogleConnected()}">
                     <div class="alert alert-success d-flex align-items-center mb-2">
