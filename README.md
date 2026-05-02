@@ -1,16 +1,19 @@
 # 🐆 Gepard Bot
 
-**Gepard** é um Bot de Telegram inteligente desenvolvido em Java (Spring Boot) que utiliza Inteligência Artificial (Google Gemini e DeepSeek) para agendar compromissos no Google Agenda automaticamente.
+**Gepard** é um Bot de Telegram inteligente desenvolvido em Java (Spring Boot) que utiliza Inteligência Artificial (Google Gemini e DeepSeek) para gerenciar compromissos no Google Agenda automaticamente.
 
-O bot é capaz de analisar **texto, áudio e imagens** para extrair detalhes de eventos (título, data, hora, localização) e criar agendamentos sem que você precise digitar manualmente.
+O bot é capaz de analisar **texto, áudio e imagens** para extrair detalhes de eventos (título, data, hora, localização), além de entender intenções de **edição e exclusão** — como "adiar o almoço para quinta" ou "cancelar a reunião de amanhã".
 
 ---
 
 ## 🚀 Funcionalidades
 
 *   **Processamento Multimodal:** Envie áudio, foto de um convite ou mensagem de texto.
-*   **Integração Google Calendar:** Cria, lista e deleta eventos diretamente na sua agenda principal.
-*   **Confirmação antes de criar:** O bot mostra o resumo do evento e pede confirmação com botões inline.
+*   **Integração Google Calendar:** Cria, edita, lista e deleta eventos diretamente na sua agenda principal.
+*   **Confirmação antes de criar/editar/deletar:** O bot mostra o resumo do evento e pede confirmação com botões inline.
+*   **Edição e Exclusão Inteligentes:** A IA detecta intenção de editar ("adiar almoço para quinta") ou deletar ("cancelar reunião").
+*   **Edição via Telegram:** Editar a mensagem original que criou o evento também dispara a atualização.
+*   **Diff campo a campo:** Ao editar, o bot mostra exatamente o que mudou (antes → depois).
 *   **Múltiplos Modelos de IA:** Suporte a Gemini (texto/foto/áudio) e DeepSeek (texto).
 *   **Roteamento automático:** Mídia → Gemini; Texto puro → modelo escolhido pelo usuário.
 *   **Painel Web de Configuração:** Interface para configurar API Key, escolher modelo e conectar Google.
@@ -135,6 +138,21 @@ Envie mensagens para o bot:
 *   `/eventos` — Lista próximos 10 eventos com índices
 *   `deletar 3` — Deleta o evento número 3 da lista
 *   `/cancelar` — Cancela operação pendente
+*   **Editar por intenção:** "adiar almoço de amanhã para quinta 14h"
+*   **Deletar por intenção:** "cancelar reunião de amanhã" ou "remover almoço"
+*   **Editar mensagem:** Edite a mensagem original que criou o evento no Telegram
+
+### 5. Edição e Exclusão Inteligentes
+A IA detecta automaticamente quando você quer **editar** ou **deletar** um evento:
+*   **Editar:** A IA entende verbos como "adiar", "mudar", "alterar", "reagendar"
+    *   Busca o evento no Google Calendar pela palavra-chave extraída
+    *   Mostra um diff com as mudanças (antes → depois)
+    *   Confirma com botões inline: [Sim, alterar] [Não, cancelar]
+*   **Deletar:** A IA entende verbos como "cancelar", "deletar", "excluir", "remover"
+    *   Busca o evento no Google Calendar
+    *   Mostra os detalhes do evento e pede confirmação
+*   **Múltiplos matches:** Se encontrar mais de um evento, mostra lista com botões numerados
+*   **Edição via Telegram:** Editar a mensagem original que criou o evento também funciona
 
 ---
 

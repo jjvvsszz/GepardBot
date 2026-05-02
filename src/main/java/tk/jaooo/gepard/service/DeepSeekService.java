@@ -37,29 +37,38 @@ public class DeepSeekService {
 
             ObjectNode systemMsg = objectMapper.createObjectNode();
             systemMsg.put("role", "system");
-            systemMsg.put("content", """
-                Voce e um assistente de agendamento.
-                Fuso: America/Sao_Paulo (-03:00).
-                Extraia detalhes do evento do texto do usuario.
-                
-                Retorne APENAS um objeto JSON com este formato exato:
-                {
-                  "summary": "titulo curto do evento",
-                  "startDateTime": "data e hora ISO8601 com -03:00 (ex: 2026-05-10T20:00:00-03:00)",
-                  "endDateTime": "data e hora ISO8601 com -03:00 (opcional)",
-                  "location": "local (opcional)",
-                  "description": "descricao (opcional)",
-                  "reminders": [30]
-                }
-                
-                REGRAS:
-                1. Os campos 'summary' e 'startDateTime' sao OBRIGATORIOS.
-                2. 'reminders' deve ser um array de numeros inteiros (minutos antes do evento).
-                3. Se o usuario pedir '2 dias antes', CALCULE: 2 * 24 * 60 = 2880. Retorne [2880].
-                4. Se o usuario pedir '1 semana antes', CALCULE: 7 * 24 * 60 = 10080.
-                5. Se nao especificar lembretes, retorne [30] (padrao 30 minutos).
-                6. Se nao especificar horario de fim, NAO inclua 'endDateTime' ou retorne null.
-                """);
+            systemMsg.put("content", String.join("\n",
+                    "Voce e um assistente de agendamento.",
+                    "Fuso: America/Sao_Paulo (-03:00).",
+                    "Extraia detalhes do evento do texto do usuario.",
+                    "",
+                    "IDENTIFIQUE A INTENCAO DO USUARIO:",
+                    "- Se for CRIAR um novo evento: operation='create' (ou omita o campo).",
+                    "- Se for EDITAR, ALTERAR, MODIFICAR, ADIAR, REAGENDAR, MUDAR um evento existente: operation='edit' + searchQuery com palavras-chave.",
+                    "- Se for CANCELAR, DELETAR, EXCLUIR, REMOVER um evento: operation='delete' + searchQuery com palavras-chave.",
+                    "- Detalhes como 'foi cancelado', 'foi adiado', 'mudei de ideia' indicam edicao ou exclusao.",
+                    "",
+                    "Retorne APENAS um objeto JSON com este formato exato:",
+                    "{",
+                    "  \"operation\": \"create|edit|delete (opcional, padrao create)\",",
+                    "  \"searchQuery\": \"palavras-chave para busca (obrigatorio para edit/delete)\",",
+                    "  \"summary\": \"titulo curto do evento\",",
+                    "  \"startDateTime\": \"data e hora ISO8601 com -03:00 (ex: 2026-05-10T20:00:00-03:00)\",",
+                    "  \"endDateTime\": \"data e hora ISO8601 com -03:00 (opcional)\",",
+                    "  \"location\": \"local (opcional)\",",
+                    "  \"description\": \"descricao (opcional)\",",
+                    "  \"reminders\": [30]",
+                    "}",
+                    "",
+                    "REGRAS:",
+                    "1. Os campos 'summary' e 'startDateTime' sao OBRIGATORIOS.",
+                    "2. 'reminders' deve ser um array de numeros inteiros (minutos antes do evento).",
+                    "3. Se o usuario pedir '2 dias antes', CALCULE: 2 * 24 * 60 = 2880. Retorne [2880].",
+                    "4. Se o usuario pedir '1 semana antes', CALCULE: 7 * 24 * 60 = 10080.",
+                    "5. Se nao especificar lembretes, retorne [30] (padrao 30 minutos).",
+                    "6. Se nao especificar horario de fim, NAO inclua 'endDateTime' ou retorne null.",
+                    "7. Para edit/delete, 'searchQuery' DEVE conter palavras-chave relevantes para encontrar o evento no calendario."
+            ));
             messages.add(systemMsg);
 
             ObjectNode userMsg = objectMapper.createObjectNode();

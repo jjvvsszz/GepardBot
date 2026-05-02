@@ -27,6 +27,7 @@ import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.telegram.telegrambots.meta.generics.TelegramClient;
 import tk.jaooo.gepard.config.BotConfig;
 import tk.jaooo.gepard.model.AppUser;
+import tk.jaooo.gepard.model.dto.AiResponseDTO;
 import tk.jaooo.gepard.model.dto.EventExtractionDTO;
 import tk.jaooo.gepard.repository.AppUserRepository;
 import tk.jaooo.gepard.service.AiService;
@@ -45,6 +46,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadUpdateConsumer {
 
     private static final DateTimeFormatter DT_FMT = DateTimeFormatter.ofPattern("dd/MM HH:mm");
+    private static final DateTimeFormatter DT_FMT_FULL = DateTimeFormatter.ofPattern("EEE dd/MM HH:mm");
 
     private final SystemSettingsService settingsService;
     private final BotConfig botConfig;
@@ -54,8 +56,17 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
     private final ObjectMapper objectMapper;
     private final String baseUrl;
 
-    private final Map<Long, EventExtractionDTO> pendingEvents = new ConcurrentHashMap<>();
+    private final Map<Long, PendingCreate> pendingEvents = new ConcurrentHashMap<>();
+    private final Map<Long, PendingEdit> pendingEdits = new ConcurrentHashMap<>();
+    private final Map<Long, PendingDelete> pendingDeletes = new ConcurrentHashMap<>();
+    private final Map<Long, MultiSelectState> multiSelectStates = new ConcurrentHashMap<>();
     private final Map<Long, List<Event>> recentEvents = new ConcurrentHashMap<>();
+
+    private record PendingCreate(EventExtractionDTO dto, Long chatId, Integer messageId) {}
+    private record PendingEdit(String eventId, Event currentEvent, EventExtractionDTO newDto, Long chatId) {}
+    private record PendingDelete(String eventId, Event currentEvent, Long chatId) {}
+    private record MultiSelectState(boolean isDelete, EventExtractionDTO newDto,
+                                    List<Event> candidates, Long chatId) {}
 
     public GepardBot(
             SystemSettingsService settingsService,
@@ -90,6 +101,10 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
             handleCallbackQuery(update);
             return;
         }
+        if (update.hasEditedMessage()) {
+            handleEditedMessage(update);
+            return;
+        }
         if (!update.hasMessage()) return;
         Message message = update.getMessage();
         Long telegramId = message.getFrom().getId();
@@ -121,6 +136,9 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
                 }
                 case "/cancelar", "/cancel" -> {
                     pendingEvents.remove(telegramId);
+                    pendingEdits.remove(telegramId);
+                    pendingDeletes.remove(telegramId);
+                    multiSelectStates.remove(telegramId);
                     recentEvents.remove(telegramId);
                     sendRawText(chatId, "✅ Operacao cancelada.");
                     return;
@@ -149,7 +167,7 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
     private void handleStart(Long chatId, AppUser user) {
         StringBuilder sb = new StringBuilder();
         sb.append("🤖 <b>GepardBot - Seu Assistente de Agenda</b>\n\n");
-        sb.append("Eu crio eventos no Google Agenda a partir de texto, fotos ou audio!\n\n");
+        sb.append("Eu crio, edito e deleto eventos no Google Agenda a partir de texto, fotos ou audio!\n\n");
 
         if (!user.hasGeminiKey()) {
             sb.append("🔑 <b>Para comecar:</b> envie sua <b>Gemini API Key</b> (obrigatoria).\n");
@@ -164,7 +182,9 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
             sb.append("/eventos - Ver proximos eventos\n");
             sb.append("/config - Painel de configuracoes\n");
             sb.append("/cancelar - Cancelar operacao atual\n\n");
-            sb.append("<b>Dica:</b> Envie texto, foto ou audio descrevendo um evento!\n");
+            sb.append("<b>Criar:</b> Envie texto, foto ou audio descrevendo um evento.\n");
+            sb.append("<b>Editar:</b> 'adiar almoco para quinta 14h'\n");
+            sb.append("<b>Deletar:</b> 'cancelar almoco de amanha' ou 'remover reuniao'\n");
             sb.append("<b>DeepSeek:</b> Envie uma chave sk-... e configure no painel /config\n");
         }
         sendHtmlText(chatId, sb.toString());
@@ -311,7 +331,19 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
 
             String jsonResponse = aiService.generateContent(fullPrompt, mediaBytes, mimeType, user);
 
-            EventExtractionDTO eventDTO = objectMapper.readValue(jsonResponse, EventExtractionDTO.class);
+            AiResponseDTO response = objectMapper.readValue(jsonResponse, AiResponseDTO.class);
+
+            if (response.isDelete() && response.getSearchQuery() != null && !response.getSearchQuery().isBlank()) {
+                handleDeleteIntention(chatId, user, response);
+                return;
+            }
+
+            if (response.isEdit() && response.getSearchQuery() != null && !response.getSearchQuery().isBlank()) {
+                handleEditIntention(chatId, user, response);
+                return;
+            }
+
+            EventExtractionDTO eventDTO = response.toEventExtractionDTO();
 
             if (eventDTO.summary() == null || eventDTO.summary().isBlank()
                     || eventDTO.startDateTime() == null || eventDTO.startDateTime().isBlank()) {
@@ -321,7 +353,7 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
                 return;
             }
 
-            pendingEvents.put(telegramId, eventDTO);
+            pendingEvents.put(telegramId, new PendingCreate(eventDTO, chatId, message.getMessageId()));
 
             String safeSummary = escapeHtml(eventDTO.summary());
             String modelUsed = getModelDisplayName(user, mediaBytes != null);
@@ -370,6 +402,380 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
         }
     }
 
+    private void handleEditIntention(Long chatId, AppUser user, AiResponseDTO response) {
+        Long telegramId = user.getTelegramId();
+        String searchQuery = response.getSearchQuery();
+
+        try {
+            List<Event> candidates = calendarService.searchEvents(user, searchQuery, 5);
+
+            if (candidates.isEmpty()) {
+                sendRawText(chatId, "❌ Nao encontrei eventos com \"" + searchQuery + "\".\nTente ser mais especifico ou use /eventos para ver sua agenda.");
+                return;
+            }
+
+            List<Event> filtered = candidates.stream()
+                    .filter(e -> e.getSummary() != null
+                            && e.getSummary().toLowerCase().contains(searchQuery.toLowerCase()))
+                    .toList();
+
+            List<Event> matches = filtered.isEmpty() ? candidates : filtered;
+
+            if (matches.size() == 1) {
+                Event event = matches.get(0);
+                showEditDiffAndConfirm(chatId, telegramId, user, event, response.toEventExtractionDTO());
+                return;
+            }
+
+            StringBuilder sb = new StringBuilder();
+            sb.append("✏️ Encontrei ").append(matches.size()).append(" eventos com \"")
+                    .append(escapeHtml(searchQuery)).append("\". Qual editar?\n\n");
+
+            List<InlineKeyboardRow> rows = new ArrayList<>();
+            for (int i = 0; i < Math.min(matches.size(), 8); i++) {
+                Event e = matches.get(i);
+                String start = formatEventDateTime(e.getStart());
+                sb.append(i + 1).append(". 📝 ").append(escapeHtml(e.getSummary()))
+                        .append(" - ⏰ ").append(start).append("\n");
+
+                InlineKeyboardButton btn = InlineKeyboardButton.builder()
+                        .text(String.valueOf(i + 1))
+                        .callbackData("edit_select_" + i)
+                        .build();
+                rows.add(new InlineKeyboardRow(btn));
+            }
+
+            rows.add(new InlineKeyboardRow(InlineKeyboardButton.builder()
+                    .text("Cancelar")
+                    .callbackData("cancel_edit_event")
+                    .build()));
+
+            multiSelectStates.put(telegramId, new MultiSelectState(false,
+                    response.toEventExtractionDTO(), matches, chatId));
+
+            SendMessage sm = SendMessage.builder()
+                    .chatId(chatId)
+                    .text(sb.toString())
+                    .parseMode("HTML")
+                    .replyMarkup(InlineKeyboardMarkup.builder().keyboard(rows).build())
+                    .build();
+            getTelegramClient().execute(sm);
+
+        } catch (IllegalStateException e) {
+            sendRawText(chatId, "❌ " + e.getMessage());
+        } catch (Exception e) {
+            log.error("Erro ao buscar evento para edicao. Usuario {}", telegramId, e);
+            sendRawText(chatId, "❌ Falha ao buscar o evento para edicao.");
+        }
+    }
+
+    private void handleDeleteIntention(Long chatId, AppUser user, AiResponseDTO response) {
+        Long telegramId = user.getTelegramId();
+        String searchQuery = response.getSearchQuery();
+
+        try {
+            List<Event> candidates = calendarService.searchEvents(user, searchQuery, 5);
+
+            if (candidates.isEmpty()) {
+                sendRawText(chatId, "❌ Nao encontrei eventos com \"" + searchQuery + "\".\nTente ser mais especifico ou use /eventos para ver sua agenda.");
+                return;
+            }
+
+            List<Event> filtered = candidates.stream()
+                    .filter(e -> e.getSummary() != null
+                            && e.getSummary().toLowerCase().contains(searchQuery.toLowerCase()))
+                    .toList();
+
+            List<Event> matches = filtered.isEmpty() ? candidates : filtered;
+
+            if (matches.size() == 1) {
+                Event event = matches.get(0);
+                showDeleteConfirm(chatId, telegramId, user, event);
+                return;
+            }
+
+            StringBuilder sb = new StringBuilder();
+            sb.append("🗑️ Encontrei ").append(matches.size()).append(" eventos com \"")
+                    .append(escapeHtml(searchQuery)).append("\". Qual deletar?\n\n");
+
+            List<InlineKeyboardRow> rows = new ArrayList<>();
+            for (int i = 0; i < Math.min(matches.size(), 8); i++) {
+                Event e = matches.get(i);
+                String start = formatEventDateTime(e.getStart());
+                sb.append(i + 1).append(". 📝 ").append(escapeHtml(e.getSummary()))
+                        .append(" - ⏰ ").append(start).append("\n");
+
+                InlineKeyboardButton btn = InlineKeyboardButton.builder()
+                        .text(String.valueOf(i + 1))
+                        .callbackData("delete_select_" + i)
+                        .build();
+                rows.add(new InlineKeyboardRow(btn));
+            }
+
+            rows.add(new InlineKeyboardRow(InlineKeyboardButton.builder()
+                    .text("Cancelar")
+                    .callbackData("cancel_delete_event")
+                    .build()));
+
+            multiSelectStates.put(telegramId, new MultiSelectState(true,
+                    null, matches, chatId));
+
+            SendMessage sm = SendMessage.builder()
+                    .chatId(chatId)
+                    .text(sb.toString())
+                    .parseMode("HTML")
+                    .replyMarkup(InlineKeyboardMarkup.builder().keyboard(rows).build())
+                    .build();
+            getTelegramClient().execute(sm);
+
+        } catch (IllegalStateException e) {
+            sendRawText(chatId, "❌ " + e.getMessage());
+        } catch (Exception e) {
+            log.error("Erro ao buscar evento para exclusao. Usuario {}", telegramId, e);
+            sendRawText(chatId, "❌ Falha ao buscar o evento para exclusao.");
+        }
+    }
+
+    private void showEditDiffAndConfirm(Long chatId, Long telegramId, AppUser user,
+                                         Event current, EventExtractionDTO newDto) {
+        try {
+            Event freshEvent = calendarService.getEvent(user, current.getId());
+
+            StringBuilder sb = new StringBuilder("✏️ <b>Alterar evento?</b>\n\n");
+
+            String oldSummary = freshEvent.getSummary() != null ? freshEvent.getSummary() : "";
+            String newSummary = newDto.summary() != null ? newDto.summary() : oldSummary;
+            if (!newSummary.equalsIgnoreCase(oldSummary)) {
+                sb.append("📝 ").append(escapeHtml(oldSummary)).append(" → ")
+                        .append(escapeHtml(newSummary)).append("\n");
+            } else {
+                sb.append("📝 ").append(escapeHtml(oldSummary)).append(" (sem alteração)\n");
+            }
+
+            String oldStart = formatEventDateTime(freshEvent.getStart());
+            String newStart = newDto.startDateTime() != null ? formatIsoDateTime(newDto.startDateTime()) : oldStart;
+            if (!newStart.equals(oldStart)) {
+                sb.append("⏰ Início: ").append(oldStart).append(" → ").append(newStart).append("\n");
+            } else {
+                sb.append("⏰ Início: ").append(oldStart).append(" (sem alteração)\n");
+            }
+
+            String oldEnd = formatEventDateTime(freshEvent.getEnd());
+            String newEnd;
+            if (newDto.endDateTime() != null && !newDto.endDateTime().isBlank()) {
+                newEnd = formatIsoDateTime(newDto.endDateTime());
+            } else {
+                newEnd = oldEnd;
+            }
+            if (!newEnd.equals(oldEnd)) {
+                sb.append("⏰ Fim: ").append(oldEnd).append(" → ").append(newEnd).append("\n");
+            }
+
+            String oldLoc = freshEvent.getLocation() != null ? freshEvent.getLocation() : "";
+            String newLoc = newDto.location() != null ? newDto.location() : oldLoc;
+            if (!newLoc.equalsIgnoreCase(oldLoc)) {
+                sb.append("📍 ").append(escapeHtml(oldLoc)).append(" → ")
+                        .append(escapeHtml(newLoc)).append("\n");
+            } else if (!oldLoc.isBlank()) {
+                sb.append("📍 ").append(escapeHtml(oldLoc)).append(" (sem alteração)\n");
+            }
+
+            pendingEdits.put(telegramId, new PendingEdit(freshEvent.getId(), freshEvent, newDto, chatId));
+
+            InlineKeyboardMarkup keyboard = InlineKeyboardMarkup.builder()
+                    .keyboardRow(new InlineKeyboardRow(
+                            InlineKeyboardButton.builder()
+                                    .text("Sim, alterar")
+                                    .callbackData("confirm_edit_event")
+                                    .build(),
+                            InlineKeyboardButton.builder()
+                                    .text("Nao, cancelar")
+                                    .callbackData("cancel_edit_event")
+                                    .build()
+                    ))
+                    .build();
+
+            sendHtmlWithKeyboard(chatId, sb.toString(), keyboard);
+
+        } catch (Exception e) {
+            log.error("Erro ao mostrar diff de edicao para usuario {}", telegramId, e);
+            sendRawText(chatId, "❌ Falha ao preparar edicao do evento.");
+        }
+    }
+
+    private void showDeleteConfirm(Long chatId, Long telegramId, AppUser user, Event event) {
+        try {
+            Event freshEvent = calendarService.getEvent(user, event.getId());
+
+            StringBuilder sb = new StringBuilder("🗑️ <b>Deletar evento?</b>\n\n");
+
+            sb.append("📝 ").append(escapeHtml(freshEvent.getSummary())).append("\n");
+            sb.append("⏰ ").append(formatEventDateTime(freshEvent.getStart()));
+            if (freshEvent.getEnd() != null) {
+                sb.append(" - ").append(formatEventDateTime(freshEvent.getEnd()));
+            }
+            sb.append("\n");
+            if (freshEvent.getLocation() != null && !freshEvent.getLocation().isBlank()) {
+                sb.append("📍 ").append(escapeHtml(freshEvent.getLocation())).append("\n");
+            }
+
+            pendingDeletes.put(telegramId, new PendingDelete(freshEvent.getId(), freshEvent, chatId));
+
+            InlineKeyboardMarkup keyboard = InlineKeyboardMarkup.builder()
+                    .keyboardRow(new InlineKeyboardRow(
+                            InlineKeyboardButton.builder()
+                                    .text("Sim, deletar")
+                                    .callbackData("confirm_delete_event")
+                                    .build(),
+                            InlineKeyboardButton.builder()
+                                    .text("Nao, cancelar")
+                                    .callbackData("cancel_delete_event")
+                                    .build()
+                    ))
+                    .build();
+
+            sendHtmlWithKeyboard(chatId, sb.toString(), keyboard);
+
+        } catch (Exception e) {
+            log.error("Erro ao mostrar confirmacao de exclusao para usuario {}", telegramId, e);
+            sendRawText(chatId, "❌ Falha ao preparar exclusao do evento.");
+        }
+    }
+
+    private void handleEditedMessage(Update update) {
+        var edited = update.getEditedMessage();
+        Long telegramId = edited.getFrom().getId();
+        Long chatId = edited.getChatId();
+        Integer messageId = edited.getMessageId();
+        String text = edited.hasText() ? edited.getText().trim() : "";
+
+        try {
+            AppUser user = userRepository.findById(telegramId).orElse(null);
+            if (user == null || !user.hasGeminiKey() || user.getGoogleRefreshToken() == null) {
+                return;
+            }
+
+            try {
+                List<Event> matchedEvents = calendarService.findEventsByExtendedProperties(
+                        user,
+                        "telegramChatId=" + chatId,
+                        "telegramMessageId=" + messageId);
+
+                if (matchedEvents.isEmpty()) {
+                    sendTypingAction(chatId);
+                    processTextAsSmartScheduling(chatId, telegramId, user, text, edited);
+                    return;
+                }
+
+                sendTypingAction(chatId);
+
+                ZonedDateTime nowSP = ZonedDateTime.now(ZoneId.of("America/Sao_Paulo"));
+                String fullPrompt = String.format("Hoje e %s (Fuso America/Sao_Paulo). O usuario pede: %s",
+                        nowSP.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME), text);
+
+                String jsonResponse = aiService.generateContent(fullPrompt, null, null, user);
+                AiResponseDTO response = objectMapper.readValue(jsonResponse, AiResponseDTO.class);
+
+                if (response.isDelete()) {
+                    Event event = matchedEvents.get(0);
+                    Event freshEvent = calendarService.getEvent(user, event.getId());
+                    pendingDeletes.put(telegramId, new PendingDelete(freshEvent.getId(), freshEvent, chatId));
+                    showDeleteConfirm(chatId, telegramId, user, event);
+                    return;
+                }
+
+                EventExtractionDTO newDto = response.toEventExtractionDTO();
+
+                if (newDto.summary() == null || newDto.summary().isBlank()
+                        || newDto.startDateTime() == null || newDto.startDateTime().isBlank()) {
+                    sendRawText(chatId, "❌ Nao consegui extrair os dados do evento editado.");
+                    return;
+                }
+
+                Event matchedEvent = matchedEvents.get(0);
+                showEditDiffAndConfirm(chatId, telegramId, user, matchedEvent, newDto);
+
+            } catch (Exception e) {
+                log.warn("Falha ao buscar evento por extendedProperty para edicao", e);
+                processTextAsSmartScheduling(chatId, telegramId, user, text, edited);
+            }
+
+        } catch (Exception e) {
+            log.error("Erro ao processar mensagem editada do usuario {}", telegramId, e);
+        }
+    }
+
+    private void processTextAsSmartScheduling(Long chatId, Long telegramId, AppUser user,
+                                               String text, Message message) {
+        try {
+            ZonedDateTime nowSP = ZonedDateTime.now(ZoneId.of("America/Sao_Paulo"));
+            String fullPrompt = String.format("Hoje e %s (Fuso America/Sao_Paulo). O usuario pede: %s",
+                    nowSP.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME), text);
+
+            String jsonResponse = aiService.generateContent(fullPrompt, null, null, user);
+            AiResponseDTO response = objectMapper.readValue(jsonResponse, AiResponseDTO.class);
+
+            if (response.isDelete() && response.getSearchQuery() != null && !response.getSearchQuery().isBlank()) {
+                handleDeleteIntention(chatId, user, response);
+                return;
+            }
+
+            if (response.isEdit() && response.getSearchQuery() != null && !response.getSearchQuery().isBlank()) {
+                handleEditIntention(chatId, user, response);
+                return;
+            }
+
+            EventExtractionDTO eventDTO = response.toEventExtractionDTO();
+
+            if (eventDTO.summary() == null || eventDTO.summary().isBlank()
+                    || eventDTO.startDateTime() == null || eventDTO.startDateTime().isBlank()) {
+                sendRawText(chatId, "❌ Nao consegui extrair os dados do evento. Tente descrever com mais detalhes.");
+                return;
+            }
+
+            pendingEvents.put(telegramId, new PendingCreate(eventDTO, chatId, message.getMessageId()));
+            sendCreateConfirmation(chatId, user, eventDTO, false);
+
+        } catch (Exception e) {
+            log.error("Erro ao processar texto no fallback para usuario {}", telegramId, e);
+            sendRawText(chatId, "❌ Falha ao processar. Tente novamente.");
+        }
+    }
+
+    private void sendCreateConfirmation(Long chatId, AppUser user, EventExtractionDTO eventDTO, boolean hasMedia) {
+        String safeSummary = escapeHtml(eventDTO.summary());
+        String modelUsed = getModelDisplayName(user, hasMedia);
+
+        String confirmMsg = """
+                📌 <b>Confirmar Evento?</b>
+
+                📝 %s
+                ⏰ Inicio: %s
+                """.formatted(safeSummary, eventDTO.startDateTime())
+                + (eventDTO.endDateTime() != null && !eventDTO.endDateTime().isBlank()
+                   ? "⏰ Fim: " + eventDTO.endDateTime() + "\n" : "")
+                + (eventDTO.location() != null && !eventDTO.location().isBlank()
+                   ? "📍 " + escapeHtml(eventDTO.location()) + "\n" : "")
+                + (eventDTO.reminders() != null && !eventDTO.reminders().isEmpty()
+                   ? "🔔 Lembretes: " + eventDTO.reminders() + " min\n" : "")
+                + "\n🤖 Modelo: " + modelUsed;
+
+        InlineKeyboardMarkup keyboard = InlineKeyboardMarkup.builder()
+                .keyboardRow(new InlineKeyboardRow(
+                        InlineKeyboardButton.builder()
+                                .text("Sim, criar evento")
+                                .callbackData("confirm_event")
+                                .build(),
+                        InlineKeyboardButton.builder()
+                                .text("Nao, cancelar")
+                                .callbackData("cancel_event")
+                                .build()
+                ))
+                .build();
+
+        sendHtmlWithKeyboard(chatId, confirmMsg, keyboard);
+    }
+
     private void handleCallbackQuery(Update update) {
         var callbackQuery = update.getCallbackQuery();
         String data = callbackQuery.getData();
@@ -381,17 +787,17 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
                     .orElseThrow(() -> new RuntimeException("Usuario nao encontrado"));
 
             if ("confirm_event".equals(data)) {
-                EventExtractionDTO eventDTO = pendingEvents.remove(telegramId);
-                if (eventDTO == null) {
+                PendingCreate pending = pendingEvents.remove(telegramId);
+                if (pending == null || pending.dto() == null) {
                     sendRawText(chatId, "⚠️ Evento nao encontrado. Operacao expirada. Tente novamente.");
                     return;
                 }
-                String eventLink = calendarService.createEvent(user, eventDTO);
+                String eventLink = calendarService.createEvent(user, pending.dto(), pending.chatId(), pending.messageId());
 
-                String safeSummary = escapeHtml(eventDTO.summary());
+                String safeSummary = escapeHtml(pending.dto().summary());
                 String msg = "✅ <b>Agendado!</b>\n\n"
                         + "📝 " + safeSummary + "\n"
-                        + "⏰ " + eventDTO.startDateTime() + "\n"
+                        + "⏰ " + pending.dto().startDateTime() + "\n"
                         + "\n<a href=\"" + escapeHtml(eventLink) + "\">Ver no Google Agenda</a>";
 
                 sendHtmlText(chatId, msg);
@@ -399,12 +805,71 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
             } else if ("cancel_event".equals(data)) {
                 pendingEvents.remove(telegramId);
                 sendRawText(chatId, "❌ Evento cancelado. Nada foi criado.");
+
+            } else if ("confirm_edit_event".equals(data)) {
+                PendingEdit pending = pendingEdits.remove(telegramId);
+                if (pending == null) {
+                    sendRawText(chatId, "⚠️ Edicao expirada. Tente novamente.");
+                    return;
+                }
+                String eventLink = calendarService.updateEvent(user, pending.eventId(), pending.newDto());
+
+                String msg = "✅ <b>Evento alterado!</b>\n\n"
+                        + "📝 " + escapeHtml(pending.newDto().summary()) + "\n"
+                        + "⏰ " + pending.newDto().startDateTime() + "\n"
+                        + "\n<a href=\"" + escapeHtml(eventLink) + "\">Ver no Google Agenda</a>";
+
+                sendHtmlText(chatId, msg);
+
+            } else if ("cancel_edit_event".equals(data)) {
+                pendingEdits.remove(telegramId);
+                multiSelectStates.remove(telegramId);
+                sendRawText(chatId, "❌ Edicao cancelada. Nada foi alterado.");
+
+            } else if ("confirm_delete_event".equals(data)) {
+                PendingDelete pending = pendingDeletes.remove(telegramId);
+                if (pending == null) {
+                    sendRawText(chatId, "⚠️ Exclusao expirada. Tente novamente.");
+                    return;
+                }
+                String summary = pending.currentEvent().getSummary();
+                calendarService.deleteEvent(user, pending.eventId());
+
+                sendRawText(chatId, "✅ Evento \"" + summary + "\" deletado!");
+
+            } else if ("cancel_delete_event".equals(data)) {
+                pendingDeletes.remove(telegramId);
+                multiSelectStates.remove(telegramId);
+                sendRawText(chatId, "❌ Exclusao cancelada. Nada foi deletado.");
+
+            } else if (data.startsWith("edit_select_")) {
+                int idx = Integer.parseInt(data.substring("edit_select_".length()));
+                MultiSelectState state = multiSelectStates.remove(telegramId);
+                if (state == null || idx < 0 || idx >= state.candidates().size()) {
+                    sendRawText(chatId, "⚠️ Selecao expirada. Tente novamente.");
+                    return;
+                }
+                Event event = state.candidates().get(idx);
+                showEditDiffAndConfirm(chatId, telegramId, user, event, state.newDto());
+
+            } else if (data.startsWith("delete_select_")) {
+                int idx = Integer.parseInt(data.substring("delete_select_".length()));
+                MultiSelectState state = multiSelectStates.remove(telegramId);
+                if (state == null || idx < 0 || idx >= state.candidates().size()) {
+                    sendRawText(chatId, "⚠️ Selecao expirada. Tente novamente.");
+                    return;
+                }
+                Event event = state.candidates().get(idx);
+                showDeleteConfirm(chatId, telegramId, user, event);
             }
 
         } catch (Exception e) {
             log.error("Erro ao processar callback do usuario {}", telegramId, e);
             pendingEvents.remove(telegramId);
-            sendRawText(chatId, "❌ Falha ao criar o evento. Tente novamente.");
+            pendingEdits.remove(telegramId);
+            pendingDeletes.remove(telegramId);
+            multiSelectStates.remove(telegramId);
+            sendRawText(chatId, "❌ Falha na operacao. Tente novamente.");
         }
     }
 
@@ -429,9 +894,19 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
             if (dt == null) return "?";
             ZonedDateTime zdt = Instant.ofEpochMilli(dt.getValue())
                     .atZone(ZoneId.of("America/Sao_Paulo"));
-            return zdt.format(DT_FMT);
+            return zdt.format(DT_FMT_FULL);
         } catch (Exception e) {
             return edt.toString();
+        }
+    }
+
+    private String formatIsoDateTime(String isoStr) {
+        try {
+            ZonedDateTime zdt = ZonedDateTime.parse(isoStr)
+                    .withZoneSameInstant(ZoneId.of("America/Sao_Paulo"));
+            return zdt.format(DT_FMT_FULL);
+        } catch (Exception e) {
+            return isoStr;
         }
     }
 
@@ -484,6 +959,21 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
             getTelegramClient().execute(sm);
         } catch (TelegramApiException e) {
             log.warn("Falha ao enviar HTML para chat {}. Reenviando como texto puro.", chatId, e);
+            sendRawText(chatId, text.replaceAll("<[^>]+>", ""));
+        }
+    }
+
+    private void sendHtmlWithKeyboard(Long chatId, String text, InlineKeyboardMarkup keyboard) {
+        SendMessage sm = SendMessage.builder()
+                .chatId(chatId)
+                .text(text)
+                .parseMode("HTML")
+                .replyMarkup(keyboard)
+                .build();
+        try {
+            getTelegramClient().execute(sm);
+        } catch (TelegramApiException e) {
+            log.warn("Falha ao enviar HTML com keyboard para chat {}", chatId, e);
             sendRawText(chatId, text.replaceAll("<[^>]+>", ""));
         }
     }

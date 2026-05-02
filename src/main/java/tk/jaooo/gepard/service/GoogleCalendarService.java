@@ -25,9 +25,7 @@ import tk.jaooo.gepard.repository.AppUserRepository;
 import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -154,6 +152,10 @@ public class GoogleCalendarService {
     }
 
     public String createEvent(AppUser user, EventExtractionDTO eventData) throws IOException, GeneralSecurityException {
+        return createEvent(user, eventData, null, null);
+    }
+
+    public String createEvent(AppUser user, EventExtractionDTO eventData, Long chatId, Integer messageId) throws IOException, GeneralSecurityException {
         if (user.getGoogleRefreshToken() == null && user.getGoogleAccessToken() == null) {
             throw new IllegalStateException("Usuario nao autenticado.");
         }
@@ -201,6 +203,13 @@ public class GoogleCalendarService {
             event.setReminders(new Event.Reminders().setUseDefault(true));
         }
 
+        if (chatId != null && messageId != null) {
+            Map<String, String> extended = new HashMap<>();
+            extended.put("telegramChatId", String.valueOf(chatId));
+            extended.put("telegramMessageId", String.valueOf(messageId));
+            event.setExtendedProperties(new Event.ExtendedProperties().setShared(extended));
+        }
+
         Event createdEvent = service.events().insert("primary", event).execute();
         return createdEvent.getHtmlLink();
     }
@@ -223,10 +232,94 @@ public class GoogleCalendarService {
         return events.getItems() != null ? events.getItems() : new ArrayList<>();
     }
 
+    public List<Event> searchEvents(AppUser user, String query, int maxResults) throws IOException, GeneralSecurityException {
+        if (user.getGoogleRefreshToken() == null && user.getGoogleAccessToken() == null) {
+            throw new IllegalStateException("Usuario nao autenticado.");
+        }
+
+        GoogleCredential credential = getValidCredential(user);
+        Calendar service = buildCalendarService(credential);
+
+        Events events = service.events().list("primary")
+                .setQ(query)
+                .setMaxResults(maxResults)
+                .setOrderBy("startTime")
+                .setSingleEvents(true)
+                .setTimeMin(new DateTime(System.currentTimeMillis()))
+                .execute();
+
+        return events.getItems() != null ? events.getItems() : new ArrayList<>();
+    }
+
+    public Event getEvent(AppUser user, String eventId) throws IOException, GeneralSecurityException {
+        GoogleCredential credential = getValidCredential(user);
+        Calendar service = buildCalendarService(credential);
+        return service.events().get("primary", eventId).execute();
+    }
+
+    public String updateEvent(AppUser user, String eventId, EventExtractionDTO eventData) throws IOException, GeneralSecurityException {
+        GoogleCredential credential = getValidCredential(user);
+        Calendar service = buildCalendarService(credential);
+
+        Event existing = service.events().get("primary", eventId).execute();
+
+        if (eventData.summary() != null && !eventData.summary().isBlank()) {
+            existing.setSummary(eventData.summary());
+        }
+        if (eventData.location() != null) {
+            existing.setLocation(eventData.location());
+        }
+        if (eventData.description() != null) {
+            existing.setDescription(eventData.description());
+        }
+
+        String timeZone = "America/Sao_Paulo";
+        if (eventData.startDateTime() != null && !eventData.startDateTime().isBlank()) {
+            DateTime start = parseDate(eventData.startDateTime());
+            DateTime end;
+            if (eventData.endDateTime() != null && !eventData.endDateTime().isBlank()) {
+                end = parseDate(eventData.endDateTime());
+            } else {
+                end = new DateTime(start.getValue() + 3600000, start.getTimeZoneShift());
+            }
+            existing.setStart(new EventDateTime().setDateTime(start).setTimeZone(timeZone));
+            existing.setEnd(new EventDateTime().setDateTime(end).setTimeZone(timeZone));
+        }
+
+        if (eventData.reminders() != null && !eventData.reminders().isEmpty()) {
+            List<EventReminder> reminderList = eventData.reminders().stream()
+                    .map(minutes -> new EventReminder().setMethod("popup").setMinutes(minutes))
+                    .collect(Collectors.toList());
+            existing.setReminders(new Event.Reminders()
+                    .setUseDefault(false)
+                    .setOverrides(reminderList));
+        }
+
+        Event updated = service.events().update("primary", eventId, existing).execute();
+        return updated.getHtmlLink();
+    }
+
     public void deleteEvent(AppUser user, String eventId) throws IOException, GeneralSecurityException {
         GoogleCredential credential = getValidCredential(user);
         Calendar service = buildCalendarService(credential);
         service.events().delete("primary", eventId).execute();
+    }
+
+    public List<Event> findEventsByExtendedProperties(AppUser user, String property1, String property2) throws IOException, GeneralSecurityException {
+        if (user.getGoogleRefreshToken() == null && user.getGoogleAccessToken() == null) {
+            throw new IllegalStateException("Usuario nao autenticado.");
+        }
+
+        GoogleCredential credential = getValidCredential(user);
+        Calendar service = buildCalendarService(credential);
+
+        Events events = service.events().list("primary")
+                .setSharedExtendedProperty(List.of(property1, property2))
+                .setMaxResults(10)
+                .setSingleEvents(true)
+                .execute();
+
+        return events.getItems() != null ? events.getItems() : new ArrayList<>();
     }
 
     private DateTime parseDate(String dateStr) {
