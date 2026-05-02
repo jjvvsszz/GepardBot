@@ -48,19 +48,39 @@
 
                 <hr>
 
-                <h5 class="mb-3">IA (Modelo Padrao do Sistema)</h5>
+                <h5 class="mb-3">IA (Modelos Padrao do Sistema)</h5>
                 <div class="mb-3">
-                    <label for="geminiModel" class="form-label">Modelo Padrao</label>
-                    <select id="geminiModel" name="geminiModel" class="form-select">
+                    <label for="defaultTextModel" class="form-label">Modelo Padrao para Texto</label>
+                    <select id="defaultTextModel" name="defaultTextModel" class="form-select">
                         <option th:each="m : ${availableModels}"
                                 th:value="${m}"
                                 th:text="${m}"
-                                th:selected="${m == config.geminiModel}">
+                                th:selected="${m == config.defaultTextModel}">
                         </option>
                     </select>
-                    <div class="form-text mt-2">
-                        DeepSeek: apenas para texto. Gemini: texto, foto e audio.
-                    </div>
+                    <div class="form-text">Qualquer modelo (Gemini ou DeepSeek). DeepSeek requer API Key do usuario.</div>
+                </div>
+                <div class="mb-3">
+                    <label for="defaultFileModel" class="form-label">Modelo Padrao para Arquivos</label>
+                    <select id="defaultFileModel" name="defaultFileModel" class="form-select">
+                        <option th:each="m : ${fileModels}"
+                                th:value="${m}"
+                                th:text="${m}"
+                                th:selected="${m == config.defaultFileModel}">
+                        </option>
+                    </select>
+                    <div class="form-text">Apenas modelos Gemini (fotos e audio nao sao suportados pelo DeepSeek).</div>
+                </div>
+                <div class="mb-3">
+                    <label for="fallbackModel" class="form-label">Modelo Fallback</label>
+                    <select id="fallbackModel" name="fallbackModel" class="form-select">
+                        <option th:each="m : ${fileModels}"
+                                th:value="${m}"
+                                th:text="${m}"
+                                th:selected="${m == config.fallbackModel}">
+                        </option>
+                    </select>
+                    <div class="form-text">Usado quando o modelo padrao e DeepSeek e o usuario nao tem API Key ou envia midia.</div>
                 </div>
 
                 <button type="submit" class="btn btn-success w-100">Salvar Alteracoes</button>

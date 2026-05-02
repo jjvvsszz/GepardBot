@@ -30,6 +30,7 @@ public class AdminController {
 
         model.addAttribute("config", config);
         model.addAttribute("availableModels", AiService.getAllModels());
+        model.addAttribute("fileModels", AiService.getFileModels());
         model.addAttribute("userCount", userRepository.count());
         return "admin";
     }
@@ -52,10 +53,9 @@ public class AdminController {
 
     @PostMapping("/admin/setup/save")
     public String saveCredentials(
-            @RequestParam String username,
             @RequestParam String password) {
 
-        settingsService.updateAdminCredentials(username, password);
+        settingsService.updateAdminCredentials(password);
         return "redirect:/admin";
     }
 
@@ -65,11 +65,14 @@ public class AdminController {
             @RequestParam String telegramBotUsername,
             @RequestParam String googleClientId,
             @RequestParam String googleClientSecret,
-            @RequestParam String geminiModel,
+            @RequestParam String defaultTextModel,
+            @RequestParam String defaultFileModel,
+            @RequestParam String fallbackModel,
             Model model) {
 
         String oldToken = settingsService.getConfig().getTelegramBotToken();
-        settingsService.updateConfig(telegramBotToken, telegramBotUsername, googleClientId, googleClientSecret, geminiModel);
+        settingsService.updateConfig(telegramBotToken, telegramBotUsername, googleClientId, googleClientSecret,
+                defaultTextModel, defaultFileModel, fallbackModel);
 
         if (!telegramBotToken.equals(oldToken)) {
             botConfig.refreshToken(telegramBotToken);
@@ -80,6 +83,7 @@ public class AdminController {
 
         model.addAttribute("config", settingsService.getConfig());
         model.addAttribute("availableModels", AiService.getAllModels());
+        model.addAttribute("fileModels", AiService.getFileModels());
         model.addAttribute("userCount", userRepository.count());
         return "admin";
     }

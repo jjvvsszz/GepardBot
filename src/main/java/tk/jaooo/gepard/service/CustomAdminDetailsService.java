@@ -22,12 +22,12 @@ public class CustomAdminDetailsService implements UserDetailsService {
         GlobalConfig config = repository.findById(1L)
                 .orElseThrow(() -> new UsernameNotFoundException("Admin não configurado"));
 
-        if (!config.getAdminUsername().equals(username)) {
+        if (!"admin".equals(username)) {
             throw new UsernameNotFoundException("Usuário incorreto");
         }
 
         return User.builder()
-                .username(config.getAdminUsername())
+                .username("admin")
                 .password(config.getAdminPasswordHash())
                 .roles("ADMIN")
                 .build();

@@ -34,6 +34,11 @@ public class GlobalConfig {
     @Column(length = 1000)
     private String googleClientSecret;
 
-    // --- GEMINI ---
-    private String geminiModel;
+    // --- IA ---
+    @Column(name = "gemini_model")
+    private String defaultTextModel;
+
+    private String defaultFileModel;
+
+    private String fallbackModel;
 }

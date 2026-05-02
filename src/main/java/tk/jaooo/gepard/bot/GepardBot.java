@@ -411,7 +411,9 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
     private String getModelDisplayName(AppUser user, boolean hasMedia) {
         String model = hasMedia ? user.getPreferredFileModel() : user.getPreferredTextModel();
         if (model == null || model.isBlank()) {
-            model = settingsService.getConfig().getGeminiModel();
+            model = hasMedia
+                    ? settingsService.getConfig().getDefaultFileModel()
+                    : settingsService.getConfig().getDefaultTextModel();
         }
         if (model == null || model.isBlank()) return "Padrao";
         if (model.contains("deepseek")) return "DeepSeek";

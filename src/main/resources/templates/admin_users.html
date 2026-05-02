@@ -26,9 +26,11 @@
                         <th>Telegram ID</th>
                         <th>Nome</th>
                         <th>Username</th>
-                        <th>API Key</th>
+                        <th>API Gemini</th>
+                        <th>API DeepSeek</th>
                         <th>Google</th>
-                        <th>Modelo</th>
+                        <th>Modelo Texto</th>
+                        <th>Modelo Arquivo</th>
                         <th>Criado em</th>
                         <th>Ativo</th>
                     </tr>
@@ -39,14 +41,19 @@
                         <td th:text="${u.firstName}"></td>
                         <td th:text="${u.username} ?: '-'"></td>
                         <td>
-                            <span class="badge bg-success" th:if="${u.hasApiKey()}">Sim</span>
-                            <span class="badge bg-secondary" th:unless="${u.hasApiKey()}">Nao</span>
+                            <span class="badge bg-success" th:if="${u.hasGeminiKey()}">Sim</span>
+                            <span class="badge bg-secondary" th:unless="${u.hasGeminiKey()}">Nao</span>
+                        </td>
+                        <td>
+                            <span class="badge bg-success" th:if="${u.hasDeepSeekKey()}">Sim</span>
+                            <span class="badge bg-secondary" th:unless="${u.hasDeepSeekKey()}">Nao</span>
                         </td>
                         <td>
                             <span class="badge bg-success" th:if="${u.isGoogleConnected()}">Sim</span>
                             <span class="badge bg-secondary" th:unless="${u.isGoogleConnected()}">Nao</span>
                         </td>
-                        <td th:text="${u.preferredModel} ?: '-'"></td>
+                        <td th:text="${u.preferredTextModel} ?: '-'"></td>
+                        <td th:text="${u.preferredFileModel} ?: '-'"></td>
                         <td th:text="${u.createdAt} ? ${#temporals.format(u.createdAt, 'dd/MM HH:mm')} : '-'"></td>
                         <td th:text="${u.updatedAt} ? ${#temporals.format(u.updatedAt, 'dd/MM HH:mm')} : '-'"></td>
                     </tr>

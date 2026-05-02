@@ -53,7 +53,9 @@ public class SystemSettingsService {
                 .telegramBotUsername(envBotUsername)
                 .googleClientId(envClientId)
                 .googleClientSecret(envClientSecret)
-                .geminiModel(AiService.getDefaultModel())
+                .defaultTextModel(AiService.getDefaultModel())
+                .defaultFileModel(AiService.getDefaultModel())
+                .fallbackModel(AiService.getDefaultModel())
                 .build();
         repository.save(config);
     }
@@ -81,20 +83,23 @@ public class SystemSettingsService {
     }
 
     @Transactional
-    public void updateConfig(String token, String username, String clientId, String clientSecret, String model) {
+    public void updateConfig(String token, String username, String clientId, String clientSecret,
+                             String defaultTextModel, String defaultFileModel, String fallbackModel) {
         GlobalConfig config = getConfig();
         config.setTelegramBotToken(token);
         config.setTelegramBotUsername(username);
         config.setGoogleClientId(clientId);
         config.setGoogleClientSecret(clientSecret);
-        config.setGeminiModel(model);
+        config.setDefaultTextModel(defaultTextModel);
+        config.setDefaultFileModel(defaultFileModel);
+        config.setFallbackModel(fallbackModel);
         repository.save(config);
     }
 
     @Transactional
-    public void updateAdminCredentials(String newUsername, String newPassword) {
+    public void updateAdminCredentials(String newPassword) {
         GlobalConfig config = getConfig();
-        config.setAdminUsername(newUsername);
+        config.setAdminUsername("admin");
         config.setAdminPasswordHash(passwordEncoder.encode(newPassword));
         config.setAdminSetupRequired(false);
         repository.save(config);
