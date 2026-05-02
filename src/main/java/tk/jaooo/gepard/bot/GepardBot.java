@@ -36,10 +36,12 @@ import tk.jaooo.gepard.service.SystemSettingsService;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.security.GeneralSecurityException;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Component
@@ -67,6 +69,7 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
     private record PendingDelete(String eventId, Event currentEvent, Long chatId) {}
     private record MultiSelectState(boolean isDelete, EventExtractionDTO newDto,
                                     List<Event> candidates, Long chatId) {}
+    private record ScoredEvent(Event event, int score) {}
 
     public GepardBot(
             SystemSettingsService settingsService,
@@ -402,24 +405,76 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
         }
     }
 
+    static List<String> extractKeywords(String searchQuery) {
+        Set<String> stopwords = Set.of("de", "da", "do", "das", "dos",
+                "em", "no", "na", "nos", "nas", "para", "pro", "pra",
+                "com", "que", "um", "uma", "uns", "umas",
+                "ja", "já", "era", "foi", "está", "esta",
+                "seu", "sua", "ele", "ela", "meu", "minha", "esse", "essa",
+                "a", "as", "o", "os", "e", "é");
+
+        String[] words = searchQuery.toLowerCase().split("\\s+");
+        List<String> keywords = new ArrayList<>();
+        for (String w : words) {
+            if (!stopwords.contains(w) && w.length() > 1) {
+                keywords.add(w);
+            }
+        }
+        if (keywords.isEmpty()) {
+            keywords.add(searchQuery.toLowerCase().trim());
+        }
+        return keywords;
+    }
+
+    private List<Event> findEventCandidates(AppUser user, String searchQuery)
+            throws IOException, GeneralSecurityException {
+        List<String> keywords = extractKeywords(searchQuery);
+
+        String mainKeyword = keywords.get(0);
+        List<Event> allCandidates = calendarService.searchEvents(user, mainKeyword, 10);
+
+        if (allCandidates.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<ScoredEvent> scored = new ArrayList<>();
+        for (Event e : allCandidates) {
+            if (e.getSummary() == null) continue;
+            String summary = e.getSummary().toLowerCase();
+            int score = 0;
+            for (String kw : keywords) {
+                if (summary.contains(kw)) score++;
+            }
+            scored.add(new ScoredEvent(e, score));
+        }
+        scored.sort((a, b) -> b.score - a.score);
+
+        List<Event> result = scored.stream()
+                .filter(s -> s.score > 0)
+                .map(ScoredEvent::event)
+                .limit(5)
+                .collect(Collectors.toList());
+
+        if (result.isEmpty() && !scored.isEmpty()) {
+            result = scored.stream()
+                    .map(ScoredEvent::event)
+                    .limit(5)
+                    .collect(Collectors.toList());
+        }
+        return result;
+    }
+
     private void handleEditIntention(Long chatId, AppUser user, AiResponseDTO response) {
         Long telegramId = user.getTelegramId();
         String searchQuery = response.getSearchQuery();
 
         try {
-            List<Event> candidates = calendarService.searchEvents(user, searchQuery, 5);
+            List<Event> matches = findEventCandidates(user, searchQuery);
 
-            if (candidates.isEmpty()) {
+            if (matches.isEmpty()) {
                 sendRawText(chatId, "❌ Nao encontrei eventos com \"" + searchQuery + "\".\nTente ser mais especifico ou use /eventos para ver sua agenda.");
                 return;
             }
-
-            List<Event> filtered = candidates.stream()
-                    .filter(e -> e.getSummary() != null
-                            && e.getSummary().toLowerCase().contains(searchQuery.toLowerCase()))
-                    .toList();
-
-            List<Event> matches = filtered.isEmpty() ? candidates : filtered;
 
             if (matches.size() == 1) {
                 Event event = matches.get(0);
@@ -474,19 +529,12 @@ public class GepardBot implements SpringLongPollingBot, LongPollingSingleThreadU
         String searchQuery = response.getSearchQuery();
 
         try {
-            List<Event> candidates = calendarService.searchEvents(user, searchQuery, 5);
+            List<Event> matches = findEventCandidates(user, searchQuery);
 
-            if (candidates.isEmpty()) {
+            if (matches.isEmpty()) {
                 sendRawText(chatId, "❌ Nao encontrei eventos com \"" + searchQuery + "\".\nTente ser mais especifico ou use /eventos para ver sua agenda.");
                 return;
             }
-
-            List<Event> filtered = candidates.stream()
-                    .filter(e -> e.getSummary() != null
-                            && e.getSummary().toLowerCase().contains(searchQuery.toLowerCase()))
-                    .toList();
-
-            List<Event> matches = filtered.isEmpty() ? candidates : filtered;
 
             if (matches.size() == 1) {
                 Event event = matches.get(0);

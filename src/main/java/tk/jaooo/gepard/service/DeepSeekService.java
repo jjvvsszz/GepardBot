@@ -51,7 +51,7 @@ public class DeepSeekService {
                     "Retorne APENAS um objeto JSON com este formato exato:",
                     "{",
                     "  \"operation\": \"create|edit|delete (opcional, padrao create)\",",
-                    "  \"searchQuery\": \"palavras-chave para busca (obrigatorio para edit/delete)\",",
+                    "  \"searchQuery\": \"APENAS a palavra principal do evento (obrigatorio para edit/delete). Ex: 'almoco de terca' -> 'almoco'. Sem artigos ou datas\",",
                     "  \"summary\": \"titulo curto do evento\",",
                     "  \"startDateTime\": \"data e hora ISO8601 com -03:00 (ex: 2026-05-10T20:00:00-03:00)\",",
                     "  \"endDateTime\": \"data e hora ISO8601 com -03:00 (opcional)\",",
@@ -67,7 +67,7 @@ public class DeepSeekService {
                     "4. Se o usuario pedir '1 semana antes', CALCULE: 7 * 24 * 60 = 10080.",
                     "5. Se nao especificar lembretes, retorne [30] (padrao 30 minutos).",
                     "6. Se nao especificar horario de fim, NAO inclua 'endDateTime' ou retorne null.",
-                    "7. Para edit/delete, 'searchQuery' DEVE conter palavras-chave relevantes para encontrar o evento no calendario."
+                    "7. Para edit/delete, searchQuery DEVE ser APENAS a palavra principal (ex: 'almoco'). NUNCA inclua 'de', 'ja era', 'foi', datas ou artigos."
             ));
             messages.add(systemMsg);
 

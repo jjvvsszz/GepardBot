@@ -41,7 +41,7 @@ public class GeminiService {
                                     .build())
                             .put("searchQuery", Schema.builder()
                                     .type(Type.Known.STRING)
-                                    .description("Para edit/delete: palavras-chave para buscar o evento no calendario (ex: 'almoco', 'reuniao equipe')")
+                                    .description("Para edit/delete: APENAS a palavra principal do evento. Ex: para 'almoco de terca ja era', retorne 'almoco'. NUNCA inclua artigos, preposicoes, verbos auxiliares ou datas.")
                                     .build())
                             .put("summary", Schema.builder()
                                     .type(Type.Known.STRING)
@@ -93,6 +93,7 @@ public class GeminiService {
                                                     "- Se for EDITAR, ALTERAR, MODIFICAR, ADIAR, REAGENDAR, MUDAR um evento existente: operation='edit' + searchQuery com palavras-chave.",
                                                     "- Se for CANCELAR, DELETAR, EXCLUIR, REMOVER um evento: operation='delete' + searchQuery com palavras-chave.",
                                                     "- Detalhes como 'foi cancelado', 'foi adiado', 'mudei de ideia' indicam edicao ou exclusao.",
+                                                    "- Para edit/delete, searchQuery DEVE ser APENAS a palavra principal (ex: 'almoco'). NUNCA inclua 'de', 'ja era', datas ou artigos.",
                                                     "",
                                                     "REGRAS DE LEMBRETES (Reminders):",
                                                     "1. O campo 'reminders' aceita APENAS numeros inteiros (minutos).",
