@@ -18,6 +18,7 @@ import java.time.Duration;
 public class DeepSeekService {
 
     private static final String API_URL = "https://api.deepseek.com/chat/completions";
+    private static final String PROVIDER = "DeepSeek";
     private static final Duration TIMEOUT = Duration.ofSeconds(120);
 
     private final ObjectMapper objectMapper;
@@ -26,7 +27,7 @@ public class DeepSeekService {
         this.objectMapper = objectMapper;
     }
 
-    public String generateContent(String promptText, String modelName, String apiKey) {
+    public String generateContent(String systemPrompt, String promptText, String modelName, String apiKey) {
         log.info("Chamando DeepSeek API com modelo: {}", modelName);
 
         try {
@@ -37,38 +38,7 @@ public class DeepSeekService {
 
             ObjectNode systemMsg = objectMapper.createObjectNode();
             systemMsg.put("role", "system");
-            systemMsg.put("content", String.join("\n",
-                    "Voce e um assistente de agendamento.",
-                    "Fuso: America/Sao_Paulo (-03:00).",
-                    "Extraia detalhes do evento do texto do usuario.",
-                    "",
-                    "IDENTIFIQUE A INTENCAO DO USUARIO:",
-                    "- Se for CRIAR um novo evento: operation='create' (ou omita o campo).",
-                    "- Se for EDITAR, ALTERAR, MODIFICAR, ADIAR, REAGENDAR, MUDAR um evento existente: operation='edit' + searchQuery com palavras-chave.",
-                    "- Se for CANCELAR, DELETAR, EXCLUIR, REMOVER um evento: operation='delete' + searchQuery com palavras-chave.",
-                    "- Detalhes como 'foi cancelado', 'foi adiado', 'mudei de ideia' indicam edicao ou exclusao.",
-                    "",
-                    "Retorne APENAS um objeto JSON com este formato exato:",
-                    "{",
-                    "  \"operation\": \"create|edit|delete (opcional, padrao create)\",",
-                    "  \"searchQuery\": \"APENAS a palavra principal do evento (obrigatorio para edit/delete). Ex: 'almoco de terca' -> 'almoco'. Sem artigos ou datas\",",
-                    "  \"summary\": \"titulo curto do evento\",",
-                    "  \"startDateTime\": \"data e hora ISO8601 com -03:00 (ex: 2026-05-10T20:00:00-03:00)\",",
-                    "  \"endDateTime\": \"data e hora ISO8601 com -03:00 (opcional)\",",
-                    "  \"location\": \"local (opcional)\",",
-                    "  \"description\": \"descricao (opcional)\",",
-                    "  \"reminders\": [30]",
-                    "}",
-                    "",
-                    "REGRAS:",
-                    "1. Os campos 'summary' e 'startDateTime' sao OBRIGATORIOS.",
-                    "2. 'reminders' deve ser um array de numeros inteiros (minutos antes do evento).",
-                    "3. Se o usuario pedir '2 dias antes', CALCULE: 2 * 24 * 60 = 2880. Retorne [2880].",
-                    "4. Se o usuario pedir '1 semana antes', CALCULE: 7 * 24 * 60 = 10080.",
-                    "5. Se nao especificar lembretes, retorne [30] (padrao 30 minutos).",
-                    "6. Se nao especificar horario de fim, NAO inclua 'endDateTime' ou retorne null.",
-                    "7. Para edit/delete, searchQuery DEVE ser APENAS a palavra principal (ex: 'almoco'). NUNCA inclua 'de', 'ja era', 'foi', datas ou artigos."
-            ));
+            systemMsg.put("content", systemPrompt + "\n" + AiPrompts.JSON_FORMAT);
             messages.add(systemMsg);
 
             ObjectNode userMsg = objectMapper.createObjectNode();
@@ -98,7 +68,8 @@ public class DeepSeekService {
 
                 if (response.statusCode() != 200) {
                     log.error("DeepSeek API retornou status {}: {}", response.statusCode(), response.body());
-                    throw new RuntimeException("DeepSeek API error: " + response.statusCode());
+                    throw new AiException(AiException.kindFromHttpStatus(response.statusCode()), PROVIDER,
+                            "DeepSeek API error: " + response.statusCode(), null);
                 }
 
                 JsonNode json = objectMapper.readTree(response.body());
@@ -111,9 +82,14 @@ public class DeepSeekService {
 
                 return content;
             }
+        } catch (AiException e) {
+            throw e;
+        } catch (java.net.http.HttpTimeoutException | java.net.ConnectException e) {
+            log.error("DeepSeek indisponivel", e);
+            throw new AiException(AiException.Kind.UNAVAILABLE, PROVIDER, e.getMessage(), e);
         } catch (Exception e) {
             log.error("Erro na chamada DeepSeek API", e);
-            throw new RuntimeException("Falha ao chamar DeepSeek: " + e.getMessage(), e);
+            throw new AiException(AiException.Kind.OTHER, PROVIDER, "Falha ao chamar DeepSeek: " + e.getMessage(), e);
         }
     }
 }

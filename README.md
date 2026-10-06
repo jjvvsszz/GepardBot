@@ -8,12 +8,14 @@ O bot é capaz de analisar **texto, áudio e imagens** para extrair detalhes de 
 
 ## 🚀 Funcionalidades
 
-*   **Processamento Multimodal:** Envie áudio, foto de um convite ou mensagem de texto.
+*   **Processamento Multimodal:** Envie texto, áudio, foto de um convite, PDF (ingresso, e-mail) ou vídeo-mensagem.
 *   **Integração Google Calendar:** Cria, edita, lista e deleta eventos diretamente na sua agenda principal.
 *   **Confirmação antes de criar/editar/deletar:** O bot mostra o resumo do evento e pede confirmação com botões inline.
+*   **Ajustar antes de criar:** Toque em *Ajustar* (ou responda à confirmação) com "às 21h", "no sábado"... e o rascunho é corrigido sem reescrever tudo.
+*   **Dia inteiro e recorrência:** Eventos de dia inteiro são suportados; em eventos recorrentes o bot pergunta se a mudança vale só para esta ocorrência ou para a série.
 *   **Edição e Exclusão Inteligentes:** A IA detecta intenção de editar ("adiar almoço para quinta") ou deletar ("cancelar reunião").
 *   **Edição via Telegram:** Editar a mensagem original que criou o evento também dispara a atualização.
-*   **Diff campo a campo:** Ao editar, o bot mostra exatamente o que mudou (antes → depois).
+*   **Diff campo a campo:** Ao editar, o bot mostra exatamente o que mudou (antes → depois). Mudando só o dia, o horário e a duração originais são mantidos.
 *   **Múltiplos Modelos de IA:** Suporte a Gemini (texto/foto/áudio) e DeepSeek (texto).
 *   **Roteamento automático:** Mídia → Gemini; Texto puro → modelo escolhido pelo usuário.
 *   **Painel Web de Configuração:** Interface para configurar API Key, escolher modelo e conectar Google.
@@ -132,11 +134,11 @@ Envie mensagens para o bot:
 *   **Texto:** "Jantar com Maria sexta 20h no Outback"
 *   **Áudio:** Grave um áudio descrevendo o compromisso
 *   **Foto:** Envie foto de convite, ingresso ou print de e-mail
-*   O bot mostra o resumo e pede confirmação antes de criar
+*   O bot mostra o resumo e pede confirmação antes de criar: [✅ Criar] [✏️ Ajustar] [✖️ Cancelar]
 
 ### 4. Gerenciando Eventos
 *   `/eventos` — Lista próximos 10 eventos com índices
-*   `deletar 3` — Deleta o evento número 3 da lista
+*   `deletar 3` — Apaga o evento número 3 da lista (com confirmação)
 *   `/cancelar` — Cancela operação pendente
 *   **Editar por intenção:** "adiar almoço de amanhã para quinta 14h"
 *   **Deletar por intenção:** "cancelar reunião de amanhã" ou "remover almoço"
@@ -151,8 +153,9 @@ A IA detecta automaticamente quando você quer **editar** ou **deletar** um even
 *   **Deletar:** A IA entende verbos como "cancelar", "deletar", "excluir", "remover"
     *   Busca o evento no Google Calendar
     *   Mostra os detalhes do evento e pede confirmação
-*   **Múltiplos matches:** Se encontrar mais de um evento, mostra lista com botões numerados
-*   **Edição via Telegram:** Editar a mensagem original que criou o evento também funciona
+*   **Busca:** Usa a data citada ("reunião de amanhã") para filtrar e ignora acentos ("almoco" encontra "Almoço")
+*   **Múltiplos matches:** Se encontrar mais de um evento, mostra um botão por evento com título e horário
+*   **Edição via Telegram:** Editar a mensagem original que criou o evento (ou que gerou um rascunho ainda não confirmado) também funciona
 
 ---
 

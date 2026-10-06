@@ -58,4 +58,24 @@ class AiServiceTest {
     private static boolean isGemini(String model) {
         return model != null && model.contains("gemini");
     }
+
+    @Test
+    void parseHandlesCodeFencesAndNoneOperation() {
+        AiService service = new AiService(null, null, null, new com.fasterxml.jackson.databind.ObjectMapper());
+        var dto = service.parse("```json\n{\"operation\":\"none\"}\n```");
+        assertThat(dto.isNone()).isTrue();
+
+        var edit = service.parse("{\"operation\":\"edit\",\"searchQuery\":\"almoco\",\"searchDate\":\"2026-05-12\"}");
+        assertThat(edit.isEdit()).isTrue();
+        assertThat(edit.getSearchDate()).isEqualTo("2026-05-12");
+    }
+
+    @Test
+    void parseRejectsInvalidJson() {
+        AiService service = new AiService(null, null, null, new com.fasterxml.jackson.databind.ObjectMapper());
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.parse("isso nao e json"))
+                .isInstanceOf(AiException.class)
+                .extracting(e -> ((AiException) e).getKind())
+                .isEqualTo(AiException.Kind.BAD_RESPONSE);
+    }
 }

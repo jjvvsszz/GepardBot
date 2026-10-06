@@ -11,7 +11,6 @@ import com.google.api.client.json.gson.GsonFactory;
 import com.google.api.client.util.DateTime;
 import com.google.api.services.calendar.Calendar;
 import com.google.api.services.calendar.model.Event;
-import com.google.api.services.calendar.model.EventDateTime;
 import com.google.api.services.calendar.model.EventReminder;
 import com.google.api.services.calendar.model.Events;
 import lombok.extern.slf4j.Slf4j;
@@ -21,10 +20,14 @@ import org.springframework.transaction.annotation.Transactional;
 import tk.jaooo.gepard.model.AppUser;
 import tk.jaooo.gepard.model.dto.EventExtractionDTO;
 import tk.jaooo.gepard.repository.AppUserRepository;
+import tk.jaooo.gepard.util.EventTimes;
 
 import java.io.IOException;
 import java.security.GeneralSecurityException;
+import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -32,6 +35,7 @@ import java.util.stream.Collectors;
 @Service
 public class GoogleCalendarService {
 
+    private static final ZoneId ZONE = EventTimes.DEFAULT_ZONE;
     private static final JsonFactory JSON_FACTORY = GsonFactory.getDefaultInstance();
     private static final List<String> SCOPES = Collections.singletonList("https://www.googleapis.com/auth/calendar");
 
@@ -151,54 +155,24 @@ public class GoogleCalendarService {
                 .build();
     }
 
-    public String createEvent(AppUser user, EventExtractionDTO eventData) throws IOException, GeneralSecurityException {
-        return createEvent(user, eventData, null, null);
-    }
-
-    public String createEvent(AppUser user, EventExtractionDTO eventData, Long chatId, Integer messageId) throws IOException, GeneralSecurityException {
-        if (user.getGoogleRefreshToken() == null && user.getGoogleAccessToken() == null) {
-            throw new IllegalStateException("Usuario nao autenticado.");
-        }
+    public Event createEvent(AppUser user, EventExtractionDTO eventData, Long chatId, Integer messageId) throws IOException, GeneralSecurityException {
+        requireAuth(user);
 
         if (eventData.summary() == null || eventData.summary().isBlank()) {
-            throw new IllegalArgumentException("Nao consegui identificar o Titulo do evento.");
+            throw new IllegalArgumentException("Não consegui identificar o título do evento.");
         }
-        if (eventData.startDateTime() == null || eventData.startDateTime().isBlank()) {
-            throw new IllegalArgumentException("Nao consegui identificar a DATA e HORA de inicio.");
-        }
+        EventTimes.TimeRange range = EventTimes.fromAi(eventData.startDateTime(), eventData.endDateTime(), ZONE);
 
-        GoogleCredential credential = getValidCredential(user);
-        Calendar service = buildCalendarService(credential);
+        Calendar service = buildCalendarService(getValidCredential(user));
 
         Event event = new Event()
                 .setSummary(eventData.summary())
                 .setLocation(eventData.location())
                 .setDescription(eventData.description());
-
-        String timeZone = "America/Sao_Paulo";
-
-        DateTime start = parseDate(eventData.startDateTime());
-        DateTime end;
-
-        if (eventData.endDateTime() != null && !eventData.endDateTime().isBlank()) {
-            end = parseDate(eventData.endDateTime());
-        } else {
-            end = new DateTime(start.getValue() + 3600000, start.getTimeZoneShift());
-        }
-
-        event.setStart(new EventDateTime().setDateTime(start).setTimeZone(timeZone));
-        event.setEnd(new EventDateTime().setDateTime(end).setTimeZone(timeZone));
+        setRange(event, range);
 
         if (eventData.reminders() != null && !eventData.reminders().isEmpty()) {
-            List<EventReminder> reminderList = eventData.reminders().stream()
-                    .map(minutes -> new EventReminder().setMethod("popup").setMinutes(minutes))
-                    .collect(Collectors.toList());
-
-            Event.Reminders reminders = new Event.Reminders()
-                    .setUseDefault(false)
-                    .setOverrides(reminderList);
-
-            event.setReminders(reminders);
+            event.setReminders(toReminders(eventData.reminders()));
         } else {
             event.setReminders(new Event.Reminders().setUseDefault(true));
         }
@@ -210,108 +184,80 @@ public class GoogleCalendarService {
             event.setExtendedProperties(new Event.ExtendedProperties().setShared(extended));
         }
 
-        Event createdEvent = service.events().insert("primary", event).execute();
-        return createdEvent.getHtmlLink();
+        return service.events().insert("primary", event).execute();
     }
 
     public List<Event> listUpcomingEvents(AppUser user, int maxResults) throws IOException, GeneralSecurityException {
-        if (user.getGoogleRefreshToken() == null && user.getGoogleAccessToken() == null) {
-            throw new IllegalStateException("Usuario nao autenticado.");
-        }
-
-        GoogleCredential credential = getValidCredential(user);
-        Calendar service = buildCalendarService(credential);
-
-        Events events = service.events().list("primary")
-                .setMaxResults(maxResults)
-                .setOrderBy("startTime")
-                .setSingleEvents(true)
-                .setTimeMin(new DateTime(System.currentTimeMillis()))
-                .execute();
-
-        return events.getItems() != null ? events.getItems() : new ArrayList<>();
+        return listEvents(user, null, Instant.now(), null, maxResults);
     }
 
-    public List<Event> searchEvents(AppUser user, String query, int maxResults) throws IOException, GeneralSecurityException {
-        if (user.getGoogleRefreshToken() == null && user.getGoogleAccessToken() == null) {
-            throw new IllegalStateException("Usuario nao autenticado.");
-        }
+    /**
+     * Lista eventos (ocorrencias individuais) entre {@code from} e {@code to} (opcional),
+     * filtrando pelo texto {@code query} (opcional) com a busca do Google.
+     */
+    public List<Event> listEvents(AppUser user, String query, Instant from, Instant to, int maxResults)
+            throws IOException, GeneralSecurityException {
+        requireAuth(user);
+        Calendar service = buildCalendarService(getValidCredential(user));
 
-        GoogleCredential credential = getValidCredential(user);
-        Calendar service = buildCalendarService(credential);
-
-        Events events = service.events().list("primary")
-                .setQ(query)
+        Calendar.Events.List request = service.events().list("primary")
                 .setMaxResults(maxResults)
                 .setOrderBy("startTime")
                 .setSingleEvents(true)
-                .setTimeMin(new DateTime(System.currentTimeMillis()))
-                .execute();
+                .setTimeMin(new DateTime(from.toEpochMilli()));
+        if (to != null) request.setTimeMax(new DateTime(to.toEpochMilli()));
+        if (query != null && !query.isBlank()) request.setQ(query);
 
+        Events events = request.execute();
         return events.getItems() != null ? events.getItems() : new ArrayList<>();
     }
 
     public Event getEvent(AppUser user, String eventId) throws IOException, GeneralSecurityException {
-        GoogleCredential credential = getValidCredential(user);
-        Calendar service = buildCalendarService(credential);
+        Calendar service = buildCalendarService(getValidCredential(user));
         return service.events().get("primary", eventId).execute();
     }
 
-    public String updateEvent(AppUser user, String eventId, EventExtractionDTO eventData) throws IOException, GeneralSecurityException {
-        GoogleCredential credential = getValidCredential(user);
-        Calendar service = buildCalendarService(credential);
+    /**
+     * Aplica uma alteracao parcial. Campos nulos permanecem; mudando so o inicio, a duracao e mantida.
+     * Com {@code wholeSeries}, altera o evento recorrente inteiro deslocando-o pela mesma diferenca de horario.
+     */
+    public Event updateEvent(AppUser user, String eventId, EventExtractionDTO patch, boolean wholeSeries)
+            throws IOException, GeneralSecurityException {
+        Calendar service = buildCalendarService(getValidCredential(user));
 
-        Event existing = service.events().get("primary", eventId).execute();
+        Event instance = service.events().get("primary", eventId).execute();
+        EventTimes.TimeRange current = EventTimes.fromEvent(instance.getStart(), instance.getEnd(), ZONE);
+        EventTimes.TimeRange updated = EventTimes.applyPatch(current, patch.startDateTime(), patch.endDateTime(), ZONE);
 
-        if (eventData.summary() != null && !eventData.summary().isBlank()) {
-            existing.setSummary(eventData.summary());
-        }
-        if (eventData.location() != null) {
-            existing.setLocation(eventData.location());
-        }
-        if (eventData.description() != null) {
-            existing.setDescription(eventData.description());
+        if (!wholeSeries || instance.getRecurringEventId() == null) {
+            applyFields(instance, patch);
+            if (!updated.equals(current)) setRange(instance, updated);
+            return service.events().update("primary", eventId, instance).execute();
         }
 
-        String timeZone = "America/Sao_Paulo";
-        if (eventData.startDateTime() != null && !eventData.startDateTime().isBlank()) {
-            DateTime start = parseDate(eventData.startDateTime());
-            DateTime end;
-            if (eventData.endDateTime() != null && !eventData.endDateTime().isBlank()) {
-                end = parseDate(eventData.endDateTime());
-            } else {
-                end = new DateTime(start.getValue() + 3600000, start.getTimeZoneShift());
+        Event master = service.events().get("primary", instance.getRecurringEventId()).execute();
+        applyFields(master, patch);
+        if (!updated.equals(current)) {
+            if (updated.allDay() != current.allDay()
+                    || !updated.start().toLocalDate().equals(current.start().toLocalDate())) {
+                throw new IllegalArgumentException(
+                        "Para mudar o dia de uma série inteira, altere só esta ocorrência ou edite no Google Agenda.");
             }
-            existing.setStart(new EventDateTime().setDateTime(start).setTimeZone(timeZone));
-            existing.setEnd(new EventDateTime().setDateTime(end).setTimeZone(timeZone));
+            EventTimes.TimeRange masterRange = EventTimes.fromEvent(master.getStart(), master.getEnd(), ZONE);
+            ZonedDateTime newStart = masterRange.start().plus(Duration.between(current.start(), updated.start()));
+            setRange(master, new EventTimes.TimeRange(newStart, newStart.plus(updated.duration()), masterRange.allDay()));
         }
-
-        if (eventData.reminders() != null && !eventData.reminders().isEmpty()) {
-            List<EventReminder> reminderList = eventData.reminders().stream()
-                    .map(minutes -> new EventReminder().setMethod("popup").setMinutes(minutes))
-                    .collect(Collectors.toList());
-            existing.setReminders(new Event.Reminders()
-                    .setUseDefault(false)
-                    .setOverrides(reminderList));
-        }
-
-        Event updated = service.events().update("primary", eventId, existing).execute();
-        return updated.getHtmlLink();
+        return service.events().update("primary", master.getId(), master).execute();
     }
 
     public void deleteEvent(AppUser user, String eventId) throws IOException, GeneralSecurityException {
-        GoogleCredential credential = getValidCredential(user);
-        Calendar service = buildCalendarService(credential);
+        Calendar service = buildCalendarService(getValidCredential(user));
         service.events().delete("primary", eventId).execute();
     }
 
     public List<Event> findEventsByExtendedProperties(AppUser user, String property1, String property2) throws IOException, GeneralSecurityException {
-        if (user.getGoogleRefreshToken() == null && user.getGoogleAccessToken() == null) {
-            throw new IllegalStateException("Usuario nao autenticado.");
-        }
-
-        GoogleCredential credential = getValidCredential(user);
-        Calendar service = buildCalendarService(credential);
+        requireAuth(user);
+        Calendar service = buildCalendarService(getValidCredential(user));
 
         Events events = service.events().list("primary")
                 .setSharedExtendedProperty(List.of(property1, property2))
@@ -322,18 +268,30 @@ public class GoogleCalendarService {
         return events.getItems() != null ? events.getItems() : new ArrayList<>();
     }
 
-    private DateTime parseDate(String dateStr) {
-        if (dateStr == null || dateStr.isBlank()) {
-            throw new IllegalArgumentException("Data invalida: string vazia ou nula");
+    private static void requireAuth(AppUser user) {
+        if (user.getGoogleRefreshToken() == null && user.getGoogleAccessToken() == null) {
+            throw new IllegalStateException("Usuário não autenticado no Google. Use /config para conectar.");
         }
-        if (dateStr.length() >= 6
-                && !dateStr.endsWith("Z")
-                && !dateStr.contains("+")
-                && dateStr.charAt(dateStr.length() - 6) != '-') {
-            dateStr = dateStr + "-03:00";
-        } else if (dateStr.length() < 6 && !dateStr.endsWith("Z") && !dateStr.contains("+")) {
-            dateStr = dateStr + "-03:00";
-        }
-        return new DateTime(dateStr);
+    }
+
+    private static void applyFields(Event event, EventExtractionDTO patch) {
+        if (patch.summary() != null && !patch.summary().isBlank()) event.setSummary(patch.summary());
+        if (patch.location() != null) event.setLocation(patch.location());
+        if (patch.description() != null) event.setDescription(patch.description());
+        if (patch.reminders() != null && !patch.reminders().isEmpty()) event.setReminders(toReminders(patch.reminders()));
+    }
+
+    private static void setRange(Event event, EventTimes.TimeRange range) {
+        event.setStart(EventTimes.toEventDateTime(range.start(), range.allDay(), ZONE));
+        event.setEnd(EventTimes.toEventDateTime(range.end(), range.allDay(), ZONE));
+    }
+
+    private static Event.Reminders toReminders(List<Integer> minutes) {
+        List<EventReminder> overrides = minutes.stream()
+                .distinct()
+                .limit(5) // limite da API do Google
+                .map(m -> new EventReminder().setMethod("popup").setMinutes(m))
+                .collect(Collectors.toList());
+        return new Event.Reminders().setUseDefault(false).setOverrides(overrides);
     }
 }

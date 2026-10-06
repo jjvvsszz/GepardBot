@@ -70,4 +70,34 @@ class GepardBotSearchTest {
         List<String> keywords = GepardBot.extractKeywords("a reunião é as 14h");
         assertThat(keywords).containsExactly("reunião", "14h");
     }
+
+    @Test
+    void rankingIgnoresAccentsAndDropsNonMatches() {
+        com.google.api.services.calendar.model.Event almoco = new com.google.api.services.calendar.model.Event().setSummary("Almoço com time");
+        com.google.api.services.calendar.model.Event dentista = new com.google.api.services.calendar.model.Event().setSummary("Dentista");
+        com.google.api.services.calendar.model.Event almocoMae = new com.google.api.services.calendar.model.Event().setSummary("Almoco mãe");
+
+        List<com.google.api.services.calendar.model.Event> ranked =
+                GepardBot.rankByKeywords(List.of(almoco, dentista, almocoMae), List.of("almoco", "mae"));
+        assertThat(ranked).containsExactly(almocoMae, almoco);
+    }
+
+    @Test
+    void normalizeStripsDiacritics() {
+        assertThat(GepardBot.normalize("Reunião ÀS Três")).isEqualTo("reuniao as tres");
+        assertThat(GepardBot.normalize(null)).isEmpty();
+    }
+
+    @Test
+    void errorMessagesAreSpecific() {
+        assertThat(GepardBot.errorMessage(new tk.jaooo.gepard.service.AiException(
+                tk.jaooo.gepard.service.AiException.Kind.QUOTA, "Gemini", "429", null))).contains("Cota");
+        assertThat(GepardBot.errorMessage(new IllegalArgumentException("Data ruim."))).isEqualTo("❌ Data ruim.");
+        assertThat(GepardBot.errorMessage(new RuntimeException("x"))).contains("erro inesperado");
+    }
+
+    @Test
+    void escapeHtmlEscapesQuotes() {
+        assertThat(GepardBot.escapeHtml("<a href=\"x\">&")).isEqualTo("&lt;a href=&quot;x&quot;&gt;&amp;");
+    }
 }

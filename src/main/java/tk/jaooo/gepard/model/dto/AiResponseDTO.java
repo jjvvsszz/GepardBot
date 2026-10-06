@@ -17,6 +17,7 @@ public class AiResponseDTO {
 
     private String operation;
     private String searchQuery;
+    private String searchDate;
     private String summary;
     private String location;
     private String description;
@@ -30,6 +31,10 @@ public class AiResponseDTO {
 
     public boolean isDelete() {
         return "delete".equalsIgnoreCase(operation);
+    }
+
+    public boolean isNone() {
+        return "none".equalsIgnoreCase(operation);
     }
 
     public EventExtractionDTO toEventExtractionDTO() {
