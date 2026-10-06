@@ -9,6 +9,8 @@ import java.util.Optional;
 public interface AppUserRepository extends JpaRepository<AppUser, Long> {
     Optional<AppUser> findByWebLoginToken(String webLoginToken);
 
+    List<AppUser> findByDailySummaryEnabledTrue();
+
     @Query(value = """
         SELECT * FROM app_users u
         WHERE (u.gemini_api_key IS NOT NULL AND u.gemini_api_key NOT LIKE '{ENC}%')

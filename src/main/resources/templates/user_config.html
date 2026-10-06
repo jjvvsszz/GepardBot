@@ -80,7 +80,45 @@
                     </div>
                 </div>
 
-                <button type="submit" class="btn btn-primary w-100">Salvar Configuracoes</button>
+                <hr>
+
+                <div class="mb-4">
+                    <label for="timeZone" class="form-label fw-bold">🌎 Fuso horário</label>
+                    <select id="timeZone" name="timeZone" class="form-select">
+                        <option th:each="z : ${zones}" th:value="${z}" th:text="${z}"
+                                th:selected="${z == currentZone}"></option>
+                    </select>
+                    <div class="form-text">Outros fusos: use <code>/fuso Cidade</code> no Telegram.</div>
+                </div>
+
+                <div class="mb-4" th:if="${user.isGoogleConnected()}">
+                    <label for="calendarId" class="form-label fw-bold">📅 Agenda usada pelo bot</label>
+                    <select id="calendarId" name="calendarId" class="form-select">
+                        <option value="primary" th:selected="${user.calendarId == null}">Agenda principal</option>
+                        <option th:each="c : ${calendars}"
+                                th:if="${c.primary == null or !c.primary}"
+                                th:value="${c.id}"
+                                th:text="${c.summaryOverride != null ? c.summaryOverride : c.summary}"
+                                th:selected="${c.id == user.calendarId}"></option>
+                    </select>
+                    <div class="form-text">Eventos são criados, buscados e listados nesta agenda.</div>
+                </div>
+
+                <div class="mb-4">
+                    <label class="form-label fw-bold">☀️ Resumo diário</label>
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="form-check form-switch mb-0">
+                            <input class="form-check-input" type="checkbox" role="switch" id="dailySummaryEnabled"
+                                   name="dailySummaryEnabled" th:checked="${user.isDailySummaryOn()}">
+                            <label class="form-check-label" for="dailySummaryEnabled">Ativado</label>
+                        </div>
+                        <input type="time" id="dailySummaryTime" name="dailySummaryTime" class="form-control"
+                               style="max-width: 140px" th:value="${summaryTime}">
+                    </div>
+                    <div class="form-text">Envia a agenda do dia no Telegram. Também dá para usar <code>/resumo 7h</code>.</div>
+                </div>
+
+                <button type="submit" class="btn btn-primary w-100">Salvar Configurações</button>
             </form>
 
             <hr class="my-4">

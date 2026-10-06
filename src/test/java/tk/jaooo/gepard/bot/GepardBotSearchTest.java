@@ -98,6 +98,63 @@ class GepardBotSearchTest {
 
     @Test
     void escapeHtmlEscapesQuotes() {
-        assertThat(GepardBot.escapeHtml("<a href=\"x\">&")).isEqualTo("&lt;a href=&quot;x&quot;&gt;&amp;");
+        assertThat(BotTexts.escapeHtml("<a href=\"x\">&")).isEqualTo("&lt;a href=&quot;x&quot;&gt;&amp;");
+    }
+
+    @Test
+    void parsesSummaryTimes() {
+        assertThat(GepardBot.parseSummaryTime("7h")).isEqualTo(java.time.LocalTime.of(7, 0));
+        assertThat(GepardBot.parseSummaryTime("06:30")).isEqualTo(java.time.LocalTime.of(6, 30));
+        assertThat(GepardBot.parseSummaryTime("19h15")).isEqualTo(java.time.LocalTime.of(19, 15));
+        assertThat(GepardBot.parseSummaryTime("25h")).isNull();
+        assertThat(GepardBot.parseSummaryTime("cedo")).isNull();
+    }
+
+    @Test
+    void parsesZonesByIdOrCity() {
+        assertThat(GepardBot.parseZone("America/Manaus")).isEqualTo(java.time.ZoneId.of("America/Manaus"));
+        assertThat(GepardBot.parseZone("manaus")).isEqualTo(java.time.ZoneId.of("America/Manaus"));
+        assertThat(GepardBot.parseZone("Cuiabá")).isEqualTo(java.time.ZoneId.of("America/Cuiaba"));
+        assertThat(GepardBot.parseZone("Lugar Nenhum")).isNull();
+    }
+
+    private static org.telegram.telegrambots.meta.api.objects.message.Message groupMessage(String text) {
+        var m = new org.telegram.telegrambots.meta.api.objects.message.Message();
+        m.setText(text);
+        return m;
+    }
+
+    @Test
+    void groupMessagesNeedMentionReplyOrCommand() {
+        assertThat(GepardBot.addressedText(groupMessage("bora almoçar amanhã?"), "GepardBot")).isNull();
+        assertThat(GepardBot.addressedText(groupMessage("@gepardbot reunião sexta 15h"), "GepardBot"))
+                .isEqualTo("reunião sexta 15h");
+        assertThat(GepardBot.addressedText(groupMessage("/eventos@GepardBot"), "GepardBot")).isEqualTo("/eventos");
+
+        var bot = new org.telegram.telegrambots.meta.api.objects.User(1L, "Gepard", true);
+        bot.setUserName("GepardBot");
+        var botMessage = new org.telegram.telegrambots.meta.api.objects.message.Message();
+        botMessage.setFrom(bot);
+        var reply = groupMessage("às 21h");
+        reply.setReplyToMessage(botMessage);
+        assertThat(GepardBot.addressedText(reply, "GepardBot")).isEqualTo("às 21h");
+    }
+
+    @Test
+    void mergeDraftKeepsUnchangedFieldsAndRecurrence() {
+        var zone = tk.jaooo.gepard.util.EventTimes.DEFAULT_ZONE;
+        var current = new tk.jaooo.gepard.model.dto.EventExtractionDTO("Academia", "Smart Fit", null,
+                "2026-05-11T07:00:00-03:00", "2026-05-11T08:00:00-03:00", List.of(30),
+                "RRULE:FREQ=WEEKLY;BYDAY=MO", null);
+        var patch = new tk.jaooo.gepard.model.dto.EventExtractionDTO(null, null, null,
+                "2026-05-11T06:30:00-03:00", null, null, null, null);
+
+        var merged = GepardBot.mergeDraft(current, patch, zone);
+        assertThat(merged.summary()).isEqualTo("Academia");
+        assertThat(merged.location()).isEqualTo("Smart Fit");
+        assertThat(merged.startDateTime()).isEqualTo("2026-05-11T06:30:00-03:00");
+        assertThat(merged.endDateTime()).isEqualTo("2026-05-11T07:30:00-03:00");
+        assertThat(merged.recurrence()).isEqualTo("RRULE:FREQ=WEEKLY;BYDAY=MO");
+        assertThat(merged.reminders()).containsExactly(30);
     }
 }

@@ -53,7 +53,7 @@ public class AiService {
 
     /** Primeira leitura de uma mensagem do usuario: intencao + dados do evento. */
     public AiResponseDTO interpret(String userText, byte[] mediaBytes, String mediaMimeType, AppUser user) {
-        String prompt = EventTimes.promptContext(ZonedDateTime.now(EventTimes.DEFAULT_ZONE))
+        String prompt = EventTimes.promptContext(ZonedDateTime.now(user.zone()))
                 + "\nMensagem do usuario: " + userText;
         return parse(generate(AiPrompts.INTERPRET, prompt, mediaBytes, mediaMimeType, user));
     }
@@ -61,7 +61,7 @@ public class AiService {
     /** Alteracao parcial de um evento existente. {@code currentEventJson} descreve o estado atual. */
     public AiResponseDTO patch(String currentEventJson, String request, byte[] mediaBytes, String mediaMimeType,
                                AppUser user) {
-        String prompt = EventTimes.promptContext(ZonedDateTime.now(EventTimes.DEFAULT_ZONE))
+        String prompt = EventTimes.promptContext(ZonedDateTime.now(user.zone()))
                 + "\nEvento ATUAL: " + currentEventJson
                 + "\nPedido do usuario: " + request;
         return parse(generate(AiPrompts.PATCH, prompt, mediaBytes, mediaMimeType, user));

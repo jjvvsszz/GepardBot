@@ -96,4 +96,26 @@ class AiResponseDTOTest {
         assertThat(eventDTO.summary()).isNull();
         assertThat(eventDTO.startDateTime()).isNull();
     }
+
+    @Test
+    void shouldReadMultipleEventsAndQueryFields() throws Exception {
+        String json = """
+                {"operation":"create","events":[
+                  {"summary":"Dentista","startDateTime":"2026-05-11T10:00:00-03:00"},
+                  {"summary":"Reuniao","startDateTime":"2026-05-13T15:00:00-03:00","attendees":["ana@x.com"],
+                   "recurrence":"RRULE:FREQ=WEEKLY"}]}""";
+        AiResponseDTO dto = new com.fasterxml.jackson.databind.ObjectMapper().readValue(json, AiResponseDTO.class);
+        assertThat(dto.toEventExtractionDTOs()).hasSize(2);
+        assertThat(dto.toEventExtractionDTOs().get(1).attendees()).containsExactly("ana@x.com");
+        assertThat(dto.toEventExtractionDTOs().get(1).recurrence()).isEqualTo("RRULE:FREQ=WEEKLY");
+
+        AiResponseDTO single = new com.fasterxml.jackson.databind.ObjectMapper()
+                .readValue("{\"summary\":\"X\",\"startDateTime\":\"2026-05-11\"}", AiResponseDTO.class);
+        assertThat(single.toEventExtractionDTOs()).extracting(EventExtractionDTO::summary).containsExactly("X");
+
+        AiResponseDTO query = new com.fasterxml.jackson.databind.ObjectMapper()
+                .readValue("{\"operation\":\"query\",\"queryStart\":\"2026-05-11T12:00:00-03:00\",\"checkFree\":true}", AiResponseDTO.class);
+        assertThat(query.isQuery()).isTrue();
+        assertThat(query.getCheckFree()).isTrue();
+    }
 }

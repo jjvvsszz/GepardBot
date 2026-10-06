@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.TimeZone;
 
 /**
@@ -228,6 +229,110 @@ public final class EventTimes {
 
     private static String plural(int n, String one, String many) {
         return n + " " + (n == 1 ? one : many);
+    }
+
+    // ---------------------------------------------------------------- recorrencia
+
+    private static final Map<String, String> WEEKDAYS = Map.of(
+            "MO", "seg", "TU", "ter", "WE", "qua", "TH", "qui", "FR", "sex", "SA", "sáb", "SU", "dom");
+
+    /**
+     * Normaliza uma regra vinda da IA para "RRULE:...". Retorna null se nao parecer uma RRULE valida.
+     */
+    public static String normalizeRecurrence(String value) {
+        if (value == null || value.isBlank()) return null;
+        String s = value.trim().toUpperCase(Locale.ROOT);
+        if (!s.startsWith("RRULE:")) s = "RRULE:" + s;
+        if (!s.matches("RRULE:([A-Z]+=[A-Z0-9,+\\-]+;?)+") || !s.contains("FREQ=")) return null;
+        return s.endsWith(";") ? s.substring(0, s.length() - 1) : s;
+    }
+
+    /** Ex: "RRULE:FREQ=WEEKLY;BYDAY=MO,WE;COUNT=10" -> "toda semana (seg, qua), 10 vezes". */
+    public static String formatRecurrence(String rrule) {
+        String normalized = normalizeRecurrence(rrule);
+        if (normalized == null) return "";
+        Map<String, String> parts = new java.util.HashMap<>();
+        for (String kv : normalized.substring("RRULE:".length()).split(";")) {
+            String[] p = kv.split("=", 2);
+            if (p.length == 2) parts.put(p[0], p[1]);
+        }
+        int interval = 1;
+        try {
+            interval = Integer.parseInt(parts.getOrDefault("INTERVAL", "1"));
+        } catch (NumberFormatException ignored) { }
+
+        String base = switch (parts.getOrDefault("FREQ", "")) {
+            case "DAILY" -> interval == 1 ? "todo dia" : "a cada " + interval + " dias";
+            case "WEEKLY" -> interval == 1 ? "toda semana" : "a cada " + interval + " semanas";
+            case "MONTHLY" -> interval == 1 ? "todo mês" : "a cada " + interval + " meses";
+            case "YEARLY" -> interval == 1 ? "todo ano" : "a cada " + interval + " anos";
+            default -> "repete";
+        };
+        StringBuilder sb = new StringBuilder(base);
+        if (parts.containsKey("BYDAY")) {
+            List<String> days = new ArrayList<>();
+            for (String d : parts.get("BYDAY").split(",")) {
+                String code = d.replaceAll("[^A-Z]", "");
+                days.add(WEEKDAYS.getOrDefault(code, d.toLowerCase(Locale.ROOT)));
+            }
+            sb.append(" (").append(String.join(", ", days)).append(")");
+        }
+        if (parts.containsKey("COUNT")) {
+            sb.append(", ").append(parts.get("COUNT")).append(" vezes");
+        } else if (parts.containsKey("UNTIL") && parts.get("UNTIL").length() >= 8) {
+            String u = parts.get("UNTIL");
+            sb.append(", até ").append(u, 6, 8).append("/").append(u, 4, 6).append("/").append(u, 0, 4);
+        }
+        return sb.toString();
+    }
+
+    // ---------------------------------------------------------------- horarios livres
+
+    /** Janelas livres de pelo menos {@code minimum} dentro de {@code window}, dados os intervalos ocupados. */
+    public static List<TimeRange> freeSlots(TimeRange window, List<TimeRange> busy, Duration minimum) {
+        List<TimeRange> sorted = busy.stream()
+                .filter(b -> !b.allDay())
+                .sorted(java.util.Comparator.comparing(TimeRange::start))
+                .toList();
+        List<TimeRange> free = new ArrayList<>();
+        ZonedDateTime cursor = window.start();
+        for (TimeRange b : sorted) {
+            if (!b.end().isAfter(cursor)) continue;
+            if (!b.start().isBefore(window.end())) break;
+            if (Duration.between(cursor, b.start()).compareTo(minimum) >= 0) {
+                free.add(new TimeRange(cursor, b.start(), false));
+            }
+            if (b.end().isAfter(cursor)) cursor = b.end();
+        }
+        if (Duration.between(cursor, window.end()).compareTo(minimum) >= 0) {
+            free.add(new TimeRange(cursor, window.end(), false));
+        }
+        return free;
+    }
+
+    /** Ex: "14:00–15:30" (mesmo dia) ou "sex, 15/05 14:00 – sáb, 16/05 10:00". */
+    public static String formatTimes(TimeRange r) {
+        if (r.start().toLocalDate().equals(r.end().toLocalDate())
+                || r.end().toLocalTime().equals(LocalTime.MIDNIGHT) && r.end().minusDays(1).toLocalDate().equals(r.start().toLocalDate())) {
+            String end = r.end().toLocalTime().equals(LocalTime.MIDNIGHT) ? "24:00" : r.end().format(TIME_FMT);
+            return r.start().format(TIME_FMT) + "–" + end;
+        }
+        return formatStart(r) + " – " + formatStart(new TimeRange(r.end(), r.end(), false));
+    }
+
+    /** Ex: "Amanhã (qua, 07/10)", "Hoje (ter, 06/10)" ou "sex, 10/10 a dom, 12/10". */
+    public static String formatPeriod(TimeRange r, LocalDate today) {
+        LocalDate first = r.start().toLocalDate();
+        LocalDate last = r.end().toLocalTime().equals(LocalTime.MIDNIGHT) && r.end().isAfter(r.start())
+                ? r.end().minusDays(1).toLocalDate() : r.end().toLocalDate();
+        if (first.equals(last)) {
+            String label = first.equals(today) ? "Hoje" : first.equals(today.plusDays(1)) ? "Amanhã" : null;
+            boolean fullDay = r.start().toLocalTime().equals(LocalTime.MIDNIGHT)
+                    && r.end().toLocalTime().equals(LocalTime.MIDNIGHT);
+            String dayText = day(r.start()) + (fullDay ? "" : ", " + formatTimes(r));
+            return label != null ? label + " (" + dayText + ")" : dayText;
+        }
+        return day(r.start()) + " a " + day(last.atStartOfDay(r.start().getZone()));
     }
 
     /** Contexto temporal enviado a IA, com o dia da semana por extenso (LLMs erram ao calcula-lo). */

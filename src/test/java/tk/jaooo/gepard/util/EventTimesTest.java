@@ -145,4 +145,48 @@ class EventTimesTest {
         String ctx = EventTimes.promptContext(sp("2026-10-06T19:30"));
         assertThat(ctx).contains("terça-feira").contains("06/10/2026 19:30").contains("UTC-03:00");
     }
+
+    @Test
+    void normalizesAndFormatsRecurrence() {
+        assertThat(EventTimes.normalizeRecurrence("FREQ=WEEKLY;BYDAY=MO,WE")).isEqualTo("RRULE:FREQ=WEEKLY;BYDAY=MO,WE");
+        assertThat(EventTimes.normalizeRecurrence("toda segunda")).isNull();
+        assertThat(EventTimes.normalizeRecurrence(null)).isNull();
+
+        assertThat(EventTimes.formatRecurrence("RRULE:FREQ=WEEKLY;BYDAY=MO,WE")).isEqualTo("toda semana (seg, qua)");
+        assertThat(EventTimes.formatRecurrence("RRULE:FREQ=DAILY;COUNT=10")).isEqualTo("todo dia, 10 vezes");
+        assertThat(EventTimes.formatRecurrence("RRULE:FREQ=MONTHLY;INTERVAL=2;UNTIL=20261231T235959Z"))
+                .isEqualTo("a cada 2 meses, até 31/12/2026");
+    }
+
+    @Test
+    void computesFreeSlots() {
+        TimeRange afternoon = new TimeRange(sp("2026-05-15T12:00"), sp("2026-05-15T18:00"), false);
+        List<TimeRange> busy = List.of(
+                new TimeRange(sp("2026-05-15T14:00"), sp("2026-05-15T15:00"), false),
+                new TimeRange(sp("2026-05-15T14:30"), sp("2026-05-15T15:30"), false), // sobreposto
+                new TimeRange(sp("2026-05-15T17:45"), sp("2026-05-15T19:00"), false),
+                EventTimes.fromAi("2026-05-15", null, SP)); // dia inteiro nao ocupa
+
+        List<TimeRange> free = EventTimes.freeSlots(afternoon, busy, Duration.ofMinutes(30));
+        assertThat(free).extracting(EventTimes::formatTimes).containsExactly("12:00–14:00", "15:30–17:45");
+    }
+
+    @Test
+    void freeSlotsWholeWindowWhenNothingBusy() {
+        TimeRange w = new TimeRange(sp("2026-05-15T12:00"), sp("2026-05-15T18:00"), false);
+        assertThat(EventTimes.freeSlots(w, List.of(), Duration.ofMinutes(30))).containsExactly(w);
+    }
+
+    @Test
+    void formatsPeriods() {
+        LocalDate today = LocalDate.of(2026, 10, 6);
+        TimeRange tomorrow = new TimeRange(sp("2026-10-07T00:00"), sp("2026-10-08T00:00"), false);
+        assertThat(EventTimes.formatPeriod(tomorrow, today)).isEqualTo("Amanhã (qua, 07/10)");
+
+        TimeRange afternoon = new TimeRange(sp("2026-10-09T12:00"), sp("2026-10-09T18:00"), false);
+        assertThat(EventTimes.formatPeriod(afternoon, today)).isEqualTo("sex, 09/10, 12:00–18:00");
+
+        TimeRange week = new TimeRange(sp("2026-10-12T00:00"), sp("2026-10-19T00:00"), false);
+        assertThat(EventTimes.formatPeriod(week, today)).isEqualTo("seg, 12/10 a dom, 18/10");
+    }
 }

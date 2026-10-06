@@ -21,7 +21,15 @@ O bot é capaz de analisar **texto, áudio e imagens** para extrair detalhes de 
 *   **Painel Web de Configuração:** Interface para configurar API Key, escolher modelo e conectar Google.
 *   **Painel Admin:** Área restrita para gerenciamento global e visualização de usuários.
 *   **Lembretes Inteligentes:** A IA define lembretes automaticamente com base no seu pedido.
-*   **Comandos do Bot:** `/start`, `/eventos`, `/config`, `/cancelar`, `deletar N`.
+*   **Vários eventos de uma vez:** "dentista seg 10h e reunião qua 15h" gera uma confirmação única.
+*   **Eventos recorrentes:** "academia toda seg e qua às 7h" cria uma série (RRULE).
+*   **Consultas:** "o que tenho amanhã?", "estou livre sexta à tarde?" (mostra horários livres), "quando é o dentista?".
+*   **Aviso de conflito:** a confirmação mostra se o horário bate com outro compromisso.
+*   **Desfazer:** depois de criar, alterar ou apagar, o botão ↩️ Desfazer fica disponível por 2 minutos.
+*   **Resumo diário:** `/resumo 7h` envia a agenda do dia todas as manhãs.
+*   **Fuso e agenda por usuário:** `/fuso Manaus` ou pelo painel; o painel também permite escolher outra agenda além da principal.
+*   **Grupos:** mencione o bot (`@SeuBot reunião sexta 15h com ana@exemplo.com`). Convidados por e-mail recebem convite, e outros membros podem tocar em ➕ para copiar o evento para a própria agenda.
+*   **Comandos do Bot:** `/start`, `/eventos`, `/config`, `/resumo`, `/fuso`, `/cancelar`, `deletar N`.
 
 ### Modelos de IA Disponíveis
 
@@ -94,6 +102,22 @@ Docker image: `ghcr.io/pterodactyl/yolks:java_25`.
 ### 🔴 Produção / Oracle Cloud (`prod`)
 Oracle Autonomous Database via TCPS.
 
+> O perfil `prod` usa `ddl-auto: validate`, então colunas novas precisam ser criadas antes de subir a versão.
+> Para fuso, agenda e resumo diário:
+>
+> ```sql
+> ALTER TABLE app_users ADD (
+>   time_zone               VARCHAR2(64),
+>   calendar_id             VARCHAR2(255),
+>   daily_summary_enabled   NUMBER(1),
+>   daily_summary_time      VARCHAR2(5),
+>   last_daily_summary_date DATE
+> );
+> ```
+>
+> (Em Oracle 23ai o Hibernate mapeia `Boolean` para `BOOLEAN`; use esse tipo em `daily_summary_enabled` se a validação reclamar.)
+> Os perfis `dev` e `ptero` usam `ddl-auto: update` e criam as colunas sozinhos.
+
 ```bash
 java -jar app.jar --spring.profiles.active=prod \
   -DORACLE_HOST="adb.region.oraclecloud.com" \
@@ -138,6 +162,8 @@ Envie mensagens para o bot:
 
 ### 4. Gerenciando Eventos
 *   `/eventos` — Lista próximos 10 eventos com índices
+*   `/resumo 7h` / `/resumo off` — Liga/desliga o resumo diário
+*   `/fuso Manaus` — Muda o fuso horário usado pelo bot
 *   `deletar 3` — Apaga o evento número 3 da lista (com confirmação)
 *   `/cancelar` — Cancela operação pendente
 *   **Editar por intenção:** "adiar almoço de amanhã para quinta 14h"

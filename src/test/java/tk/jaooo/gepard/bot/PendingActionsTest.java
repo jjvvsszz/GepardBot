@@ -9,7 +9,7 @@ class PendingActionsTest {
 
     private static PendingActions.Create create(long user, int sourceMsg, String summary) {
         return new PendingActions.Create(user, 10L, sourceMsg,
-                new EventExtractionDTO(summary, null, null, "2026-05-10T10:00:00-03:00", null, null));
+                java.util.List.of(new EventExtractionDTO(summary, null, null, "2026-05-10T10:00:00-03:00", null, null)));
     }
 
     @Test
@@ -20,8 +20,8 @@ class PendingActionsTest {
 
         assertThat(first).isNotEqualTo(second);
         // confirmar a primeira nao pode usar os dados da segunda
-        assertThat(((PendingActions.Create) pending.get(first).orElseThrow()).dto().summary()).isEqualTo("Dentista");
-        assertThat(((PendingActions.Create) pending.get(second).orElseThrow()).dto().summary()).isEqualTo("Reuniao");
+        assertThat(((PendingActions.Create) pending.get(first).orElseThrow()).single().summary()).isEqualTo("Dentista");
+        assertThat(((PendingActions.Create) pending.get(second).orElseThrow()).single().summary()).isEqualTo("Reuniao");
     }
 
     @Test
@@ -44,7 +44,7 @@ class PendingActionsTest {
         pending.replace(id, create(1, 100, "Dentista 15h"));
 
         assertThat(pending.getMessageId(id)).contains(555);
-        assertThat(((PendingActions.Create) pending.get(id).orElseThrow()).dto().summary()).isEqualTo("Dentista 15h");
+        assertThat(((PendingActions.Create) pending.get(id).orElseThrow()).single().summary()).isEqualTo("Dentista 15h");
     }
 
     @Test

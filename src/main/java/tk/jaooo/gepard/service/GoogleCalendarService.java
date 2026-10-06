@@ -10,7 +10,10 @@ import com.google.api.client.json.JsonFactory;
 import com.google.api.client.json.gson.GsonFactory;
 import com.google.api.client.util.DateTime;
 import com.google.api.services.calendar.Calendar;
+import com.google.api.services.calendar.model.CalendarList;
+import com.google.api.services.calendar.model.CalendarListEntry;
 import com.google.api.services.calendar.model.Event;
+import com.google.api.services.calendar.model.EventAttendee;
 import com.google.api.services.calendar.model.EventReminder;
 import com.google.api.services.calendar.model.Events;
 import lombok.extern.slf4j.Slf4j;
@@ -35,7 +38,6 @@ import java.util.stream.Collectors;
 @Service
 public class GoogleCalendarService {
 
-    private static final ZoneId ZONE = EventTimes.DEFAULT_ZONE;
     private static final JsonFactory JSON_FACTORY = GsonFactory.getDefaultInstance();
     private static final List<String> SCOPES = Collections.singletonList("https://www.googleapis.com/auth/calendar");
 
@@ -161,7 +163,8 @@ public class GoogleCalendarService {
         if (eventData.summary() == null || eventData.summary().isBlank()) {
             throw new IllegalArgumentException("Não consegui identificar o título do evento.");
         }
-        EventTimes.TimeRange range = EventTimes.fromAi(eventData.startDateTime(), eventData.endDateTime(), ZONE);
+        ZoneId zone = user.zone();
+        EventTimes.TimeRange range = EventTimes.fromAi(eventData.startDateTime(), eventData.endDateTime(), zone);
 
         Calendar service = buildCalendarService(getValidCredential(user));
 
@@ -169,13 +172,19 @@ public class GoogleCalendarService {
                 .setSummary(eventData.summary())
                 .setLocation(eventData.location())
                 .setDescription(eventData.description());
-        setRange(event, range);
+        setRange(event, range, zone);
 
         if (eventData.reminders() != null && !eventData.reminders().isEmpty()) {
             event.setReminders(toReminders(eventData.reminders()));
         } else {
             event.setReminders(new Event.Reminders().setUseDefault(true));
         }
+
+        String rrule = EventTimes.normalizeRecurrence(eventData.recurrence());
+        if (rrule != null) event.setRecurrence(List.of(rrule));
+
+        List<EventAttendee> attendees = toAttendees(eventData.attendees());
+        if (!attendees.isEmpty()) event.setAttendees(attendees);
 
         if (chatId != null && messageId != null) {
             Map<String, String> extended = new HashMap<>();
@@ -184,7 +193,9 @@ public class GoogleCalendarService {
             event.setExtendedProperties(new Event.ExtendedProperties().setShared(extended));
         }
 
-        return service.events().insert("primary", event).execute();
+        Calendar.Events.Insert insert = service.events().insert(user.calendar(), event);
+        if (!attendees.isEmpty()) insert.setSendUpdates("all");
+        return insert.execute();
     }
 
     public List<Event> listUpcomingEvents(AppUser user, int maxResults) throws IOException, GeneralSecurityException {
@@ -200,7 +211,7 @@ public class GoogleCalendarService {
         requireAuth(user);
         Calendar service = buildCalendarService(getValidCredential(user));
 
-        Calendar.Events.List request = service.events().list("primary")
+        Calendar.Events.List request = service.events().list(user.calendar())
                 .setMaxResults(maxResults)
                 .setOrderBy("startTime")
                 .setSingleEvents(true)
@@ -212,9 +223,25 @@ public class GoogleCalendarService {
         return events.getItems() != null ? events.getItems() : new ArrayList<>();
     }
 
+    /**
+     * Eventos com horario que ocupam parte de {@code range} (ignora dia inteiro, "disponivel" e recusados),
+     * exceto {@code ignoreEventId}.
+     */
+    public List<Event> findConflicts(AppUser user, EventTimes.TimeRange range, String ignoreEventId)
+            throws IOException, GeneralSecurityException {
+        if (range.allDay()) return List.of();
+        return listEvents(user, null, range.start().toInstant(), range.end().toInstant(), 20).stream()
+                .filter(e -> e.getStart() != null && e.getStart().getDateTime() != null)
+                .filter(e -> !"transparent".equals(e.getTransparency()))
+                .filter(e -> ignoreEventId == null || !ignoreEventId.equals(e.getId()))
+                .filter(e -> e.getAttendees() == null || e.getAttendees().stream()
+                        .noneMatch(a -> Boolean.TRUE.equals(a.getSelf()) && "declined".equals(a.getResponseStatus())))
+                .toList();
+    }
+
     public Event getEvent(AppUser user, String eventId) throws IOException, GeneralSecurityException {
         Calendar service = buildCalendarService(getValidCredential(user));
-        return service.events().get("primary", eventId).execute();
+        return service.events().get(user.calendar(), eventId).execute();
     }
 
     /**
@@ -224,18 +251,23 @@ public class GoogleCalendarService {
     public Event updateEvent(AppUser user, String eventId, EventExtractionDTO patch, boolean wholeSeries)
             throws IOException, GeneralSecurityException {
         Calendar service = buildCalendarService(getValidCredential(user));
+        ZoneId zone = user.zone();
+        String calendarId = user.calendar();
 
-        Event instance = service.events().get("primary", eventId).execute();
-        EventTimes.TimeRange current = EventTimes.fromEvent(instance.getStart(), instance.getEnd(), ZONE);
-        EventTimes.TimeRange updated = EventTimes.applyPatch(current, patch.startDateTime(), patch.endDateTime(), ZONE);
+        Event instance = service.events().get(calendarId, eventId).execute();
+        EventTimes.TimeRange current = EventTimes.fromEvent(instance.getStart(), instance.getEnd(), zone);
+        EventTimes.TimeRange updated = EventTimes.applyPatch(current, patch.startDateTime(), patch.endDateTime(), zone);
+        boolean notify = patch.attendees() != null && !patch.attendees().isEmpty();
 
         if (!wholeSeries || instance.getRecurringEventId() == null) {
             applyFields(instance, patch);
-            if (!updated.equals(current)) setRange(instance, updated);
-            return service.events().update("primary", eventId, instance).execute();
+            if (!updated.equals(current)) setRange(instance, updated, zone);
+            Calendar.Events.Update update = service.events().update(calendarId, eventId, instance);
+            if (notify) update.setSendUpdates("all");
+            return update.execute();
         }
 
-        Event master = service.events().get("primary", instance.getRecurringEventId()).execute();
+        Event master = service.events().get(calendarId, instance.getRecurringEventId()).execute();
         applyFields(master, patch);
         if (!updated.equals(current)) {
             if (updated.allDay() != current.allDay()
@@ -243,23 +275,53 @@ public class GoogleCalendarService {
                 throw new IllegalArgumentException(
                         "Para mudar o dia de uma série inteira, altere só esta ocorrência ou edite no Google Agenda.");
             }
-            EventTimes.TimeRange masterRange = EventTimes.fromEvent(master.getStart(), master.getEnd(), ZONE);
+            EventTimes.TimeRange masterRange = EventTimes.fromEvent(master.getStart(), master.getEnd(), zone);
             ZonedDateTime newStart = masterRange.start().plus(Duration.between(current.start(), updated.start()));
-            setRange(master, new EventTimes.TimeRange(newStart, newStart.plus(updated.duration()), masterRange.allDay()));
+            setRange(master, new EventTimes.TimeRange(newStart, newStart.plus(updated.duration()), masterRange.allDay()), zone);
         }
-        return service.events().update("primary", master.getId(), master).execute();
+        Calendar.Events.Update update = service.events().update(calendarId, master.getId(), master);
+        if (notify) update.setSendUpdates("all");
+        return update.execute();
     }
 
     public void deleteEvent(AppUser user, String eventId) throws IOException, GeneralSecurityException {
         Calendar service = buildCalendarService(getValidCredential(user));
-        service.events().delete("primary", eventId).execute();
+        service.events().delete(user.calendar(), eventId).execute();
+    }
+
+    /** Desfaz uma exclusao: eventos apagados ficam com status "cancelled" e podem voltar a "confirmed". */
+    public Event restoreDeleted(AppUser user, String eventId) throws IOException, GeneralSecurityException {
+        Calendar service = buildCalendarService(getValidCredential(user));
+        return service.events().patch(user.calendar(), eventId, new Event().setStatus("confirmed")).execute();
+    }
+
+    /** Desfaz uma alteracao, regravando os campos editaveis de um snapshot anterior. */
+    public Event restoreSnapshot(AppUser user, Event snapshot) throws IOException, GeneralSecurityException {
+        Calendar service = buildCalendarService(getValidCredential(user));
+        Event fields = new Event()
+                .setSummary(snapshot.getSummary())
+                .setLocation(snapshot.getLocation() != null ? snapshot.getLocation() : "")
+                .setDescription(snapshot.getDescription() != null ? snapshot.getDescription() : "")
+                .setStart(snapshot.getStart())
+                .setEnd(snapshot.getEnd())
+                .setReminders(snapshot.getReminders());
+        if (snapshot.getAttendees() != null) fields.setAttendees(snapshot.getAttendees());
+        return service.events().patch(user.calendar(), snapshot.getId(), fields).execute();
+    }
+
+    /** Agendas em que o usuario pode criar eventos (para escolha no painel). */
+    public List<CalendarListEntry> listWritableCalendars(AppUser user) throws IOException, GeneralSecurityException {
+        requireAuth(user);
+        Calendar service = buildCalendarService(getValidCredential(user));
+        CalendarList list = service.calendarList().list().setMinAccessRole("writer").execute();
+        return list.getItems() != null ? list.getItems() : List.of();
     }
 
     public List<Event> findEventsByExtendedProperties(AppUser user, String property1, String property2) throws IOException, GeneralSecurityException {
         requireAuth(user);
         Calendar service = buildCalendarService(getValidCredential(user));
 
-        Events events = service.events().list("primary")
+        Events events = service.events().list(user.calendar())
                 .setSharedExtendedProperty(List.of(property1, property2))
                 .setMaxResults(10)
                 .setSingleEvents(true)
@@ -279,11 +341,26 @@ public class GoogleCalendarService {
         if (patch.location() != null) event.setLocation(patch.location());
         if (patch.description() != null) event.setDescription(patch.description());
         if (patch.reminders() != null && !patch.reminders().isEmpty()) event.setReminders(toReminders(patch.reminders()));
+        List<EventAttendee> attendees = toAttendees(patch.attendees());
+        if (!attendees.isEmpty()) event.setAttendees(attendees);
     }
 
-    private static void setRange(Event event, EventTimes.TimeRange range) {
-        event.setStart(EventTimes.toEventDateTime(range.start(), range.allDay(), ZONE));
-        event.setEnd(EventTimes.toEventDateTime(range.end(), range.allDay(), ZONE));
+    private static void setRange(Event event, EventTimes.TimeRange range, ZoneId zone) {
+        event.setStart(EventTimes.toEventDateTime(range.start(), range.allDay(), zone));
+        event.setEnd(EventTimes.toEventDateTime(range.end(), range.allDay(), zone));
+    }
+
+    /** Apenas e-mails com formato valido, sem repeticao. */
+    public static List<EventAttendee> toAttendees(List<String> emails) {
+        if (emails == null) return List.of();
+        return emails.stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(e -> e.matches("[^@\\s]+@[^@\\s]+\\.[^@\\s]+"))
+                .map(e -> e.toLowerCase(Locale.ROOT))
+                .distinct()
+                .map(e -> new EventAttendee().setEmail(e))
+                .toList();
     }
 
     private static Event.Reminders toReminders(List<Integer> minutes) {

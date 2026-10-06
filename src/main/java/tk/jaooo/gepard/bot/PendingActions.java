@@ -9,6 +9,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -18,17 +19,26 @@ import java.util.concurrent.ConcurrentHashMap;
 class PendingActions {
 
     static final Duration TTL = Duration.ofHours(1);
+    static final Duration UNDO_TTL = Duration.ofMinutes(2);
+    static final Duration SHARE_TTL = Duration.ofDays(7);
 
     /** Pedido do usuario repassado a IA na etapa de alteracao (texto e, opcionalmente, a midia original). */
     record Request(String text, byte[] media, String mimeType) {}
 
-    sealed interface Action permits Create, Edit, Delete, Select {
+    sealed interface Action permits Create, Edit, Delete, Select, UndoCreate, UndoEdit, UndoDelete, Share {
         long userId();
         long chatId();
     }
 
-    /** {@code sourceMessageId}: mensagem do usuario que originou o evento (para edicoes via Telegram). */
-    record Create(long userId, long chatId, Integer sourceMessageId, EventExtractionDTO dto) implements Action {}
+    /**
+     * Um ou mais eventos a criar. {@code sourceMessageId}: mensagem do usuario que originou o pedido
+     * (para edicoes via Telegram).
+     */
+    record Create(long userId, long chatId, Integer sourceMessageId, List<EventExtractionDTO> dtos) implements Action {
+        EventExtractionDTO single() {
+            return dtos.getFirst();
+        }
+    }
 
     record Edit(long userId, long chatId, String eventId, boolean recurring, EventExtractionDTO patch) implements Action {}
 
@@ -36,18 +46,31 @@ class PendingActions {
 
     record Select(long userId, long chatId, boolean delete, Request request, List<Event> candidates) implements Action {}
 
+    /** Desfazer: apagar os eventos recem-criados. */
+    record UndoCreate(long userId, long chatId, List<String> eventIds) implements Action {}
+
+    /** Desfazer: regravar o estado anterior do evento. */
+    record UndoEdit(long userId, long chatId, Event snapshot) implements Action {}
+
+    /** Desfazer: restaurar o evento apagado. */
+    record UndoDelete(long userId, long chatId, String eventId, String summary) implements Action {}
+
+    /** Em grupos: qualquer membro pode copiar os eventos criados para a propria agenda. */
+    record Share(long userId, long chatId, List<EventExtractionDTO> dtos, Set<Long> addedBy) implements Action {}
+
     private static final class Entry {
         final Action action;
-        final Instant createdAt = Instant.now();
+        final Instant expiresAt;
         volatile Integer messageId;
 
-        Entry(Action action, Integer messageId) {
+        Entry(Action action, Instant expiresAt, Integer messageId) {
             this.action = action;
+            this.expiresAt = expiresAt;
             this.messageId = messageId;
         }
 
         boolean expired() {
-            return createdAt.plus(TTL).isBefore(Instant.now());
+            return expiresAt.isBefore(Instant.now());
         }
     }
 
@@ -58,20 +81,26 @@ class PendingActions {
     private final Map<Long, String> awaitingAdjust = new ConcurrentHashMap<>();
 
     String put(Action action) {
+        return put(action, TTL);
+    }
+
+    String put(Action action, Duration ttl) {
         purgeExpired();
+        Instant expiresAt = Instant.now().plus(ttl);
         String id;
         do {
             StringBuilder sb = new StringBuilder(8);
             for (int i = 0; i < 8; i++) sb.append(ALPHABET.charAt(random.nextInt(ALPHABET.length())));
             id = sb.toString();
-        } while (entries.putIfAbsent(id, new Entry(action, null)) != null);
+        } while (entries.putIfAbsent(id, new Entry(action, expiresAt, null)) != null);
         return id;
     }
 
     /** Substitui a acao mantendo o id e a mensagem de confirmacao associada. */
     void replace(String id, Action action) {
         Entry old = entries.get(id);
-        entries.put(id, new Entry(action, old != null ? old.messageId : null));
+        entries.put(id, new Entry(action,
+                old != null ? old.expiresAt : Instant.now().plus(TTL), old != null ? old.messageId : null));
     }
 
     Optional<Action> get(String id) {
@@ -127,8 +156,11 @@ class PendingActions {
         return Optional.ofNullable(awaitingAdjust.remove(userId));
     }
 
+    /** Descarta as confirmacoes pendentes do usuario (desfazer e compartilhamentos continuam valendo). */
     void clearUser(long userId) {
-        entries.values().removeIf(e -> e.action.userId() == userId);
+        entries.values().removeIf(e -> e.action.userId() == userId
+                && (e.action instanceof Create || e.action instanceof Edit
+                    || e.action instanceof Delete || e.action instanceof Select));
         awaitingAdjust.remove(userId);
     }
 
