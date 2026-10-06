@@ -25,10 +25,10 @@ O bot é capaz de analisar **texto, áudio e imagens** para extrair detalhes de 
 
 | Modelo | Provedor | Suporte |
 |---|---|---|
-| `models/gemini-3.1-flash-lite-preview` | Google (padrão) | Texto, foto, áudio |
-| `models/gemini-3-flash-preview` | Google | Texto, foto, áudio |
+| `models/gemini-3.5-flash-lite` | Google (padrão) | Texto, foto, áudio |
+| `models/gemini-3.8-flash` | Google | Texto, foto, áudio |
 | `models/gemini-3.1-pro-preview` | Google | Texto, foto, áudio |
-| `deepseek-v4-flash` | DeepSeek | Apenas texto |
+| `deepseek-flash` | DeepSeek | Apenas texto |
 | `deepseek-v4-pro` | DeepSeek | Apenas texto |
 
 > DeepSeek é usado apenas para mensagens de texto. Se o usuário enviar foto/áudio com DeepSeek selecionado, o bot usa Gemini automaticamente.
