@@ -24,22 +24,22 @@ public class AiService {
 
     private static final List<String> DEEPSEEK_MODELS = List.of(
             "deepseek-v4-pro",
-            "deepseek-v4-flash"
+            "deepseek-flash"
     );
 
     private static final List<String> GEMINI_ONLY_MODELS = List.of(
             "models/gemini-3.1-pro-preview",
-            "models/gemini-3-flash-preview",
-            "models/gemini-3.1-flash-lite-preview"
+            "models/gemini-3.8-flash",
+            "models/gemini-3.5-flash-lite"
     );
 
     public static List<String> getAllModels() {
         return List.of(
                 "models/gemini-3.1-pro-preview",
-                "models/gemini-3-flash-preview",
-                "models/gemini-3.1-flash-lite-preview",
+                "models/gemini-3.8-flash",
+                "models/gemini-3.5-flash-lite",
                 "deepseek-v4-pro",
-                "deepseek-v4-flash"
+                "deepseek-flash"
         );
     }
 
@@ -48,7 +48,7 @@ public class AiService {
     }
 
     public static String getDefaultModel() {
-        return "models/gemini-3.1-flash-lite-preview";
+        return "models/gemini-3.5-flash-lite";
     }
 
     /** Primeira leitura de uma mensagem do usuario: intencao + dados do evento. */

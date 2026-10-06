@@ -14,10 +14,10 @@ class AiServiceTest {
         assertThat(models).hasSize(5);
         assertThat(models).contains(
                 "models/gemini-3.1-pro-preview",
-                "models/gemini-3-flash-preview",
-                "models/gemini-3.1-flash-lite-preview",
+                "models/gemini-3.8-flash",
+                "models/gemini-3.5-flash-lite",
                 "deepseek-v4-pro",
-                "deepseek-v4-flash"
+                "deepseek-flash"
         );
     }
 
@@ -26,29 +26,29 @@ class AiServiceTest {
         List<String> fileModels = AiService.getFileModels();
         assertThat(fileModels).hasSize(3);
         assertThat(fileModels).allMatch(m -> m.contains("gemini"));
-        assertThat(fileModels).doesNotContain("deepseek-v4-pro", "deepseek-v4-flash");
+        assertThat(fileModels).doesNotContain("deepseek-v4-pro", "deepseek-flash");
     }
 
     @Test
     void defaultModelShouldBeFlashLite() {
-        assertThat(AiService.getDefaultModel()).isEqualTo("models/gemini-3.1-flash-lite-preview");
+        assertThat(AiService.getDefaultModel()).isEqualTo("models/gemini-3.5-flash-lite");
     }
 
     @Test
     void shouldDetectDeepSeekInModelName() {
         assertThat(isDeepSeek("deepseek-v4-pro")).isTrue();
-        assertThat(isDeepSeek("deepseek-v4-flash")).isTrue();
-        assertThat(isDeepSeek("models/gemini-3-flash-preview")).isFalse();
-        assertThat(isDeepSeek("models/gemini-3.1-flash-lite-preview")).isFalse();
+        assertThat(isDeepSeek("deepseek-flash")).isTrue();
+        assertThat(isDeepSeek("models/gemini-3.8-flash")).isFalse();
+        assertThat(isDeepSeek("models/gemini-3.5-flash-lite")).isFalse();
     }
 
     @Test
     void shouldDetectGeminiInModelName() {
         assertThat(isGemini("models/gemini-3.1-pro-preview")).isTrue();
-        assertThat(isGemini("models/gemini-3-flash-preview")).isTrue();
-        assertThat(isGemini("models/gemini-3.1-flash-lite-preview")).isTrue();
+        assertThat(isGemini("models/gemini-3.8-flash")).isTrue();
+        assertThat(isGemini("models/gemini-3.5-flash-lite")).isTrue();
         assertThat(isGemini("deepseek-v4-pro")).isFalse();
-        assertThat(isGemini("deepseek-v4-flash")).isFalse();
+        assertThat(isGemini("deepseek-flash")).isFalse();
     }
 
     private static boolean isDeepSeek(String model) {
